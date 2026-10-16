@@ -25,6 +25,7 @@ pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu   
 | `assets/` | `make_logo.py` → `logo.png`/`icon.ico`; `assets/windows/` = Edge launcher `.bat` + shortcut `.ps1` (installed copies: `C:\Users\stigg\qwen3-tts_studio\`, `qwen3-tts Studio.lnk` on Desktop) |
 | Script writer backends | Local Ollama default (`SCRIPT_MODELS`, UI default `darkidol`) + optional free-tier Groq/Gemini (`SCRIPT_CLOUD`). Cloud keys: `keys.json` (chmod 600, values never served) or `GROQ_API_KEY`/`GEMINI_API_KEY` env. Cloud failures auto-fall-back to local Dark Idol. |
 | `outputs/` / `uploads/` | Served WAVs (`/outputs/*.wav`) / temp reference-audio uploads |
+| Repo hygiene | `LICENSE` (Apache-2.0), `.gitignore` (excludes `keys.json`, WAVs, logs, runtime JSON), `smoke.sh` (endpoint smoke test — run with server up) |
 | `calib.json` | Self-tuning synth-time estimates (auto-written, learn from real jobs) |
 | `server.log` | Uvicorn log (tail for OOM / load errors) |
 
