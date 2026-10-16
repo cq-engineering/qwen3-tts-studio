@@ -1,0 +1,10 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+soundfile>=0.12
+numpy>=1.26
+huggingface_hub>=0.23
+python-multipart>=0.0.9
+# torch CPU is installed separately:
+# pip install torch --index-url https://download.pytorch.org/whl/cpu
+# main TTS package:
+qwen-tts>=0.0.3

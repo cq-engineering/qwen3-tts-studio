@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Qwen3-TTS Studio — American Voices in High Quality</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  fontFamily: { sans: ['Inter','system-ui','sans-serif'], mono: ['JetBrains Mono','monospace'] },
+  colors: { ink: '#070a13', panel: '#0d1220', card: '#121829', line: 'rgba(255,255,255,.08)' }
+}}}
+</script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; }
+  body { background:#070a13; color:#e8ecf6; font-family:Inter,system-ui,sans-serif; min-height:100vh; }
+  .bg-orbs::before, .bg-orbs::after { content:''; position:fixed; border-radius:50%; filter:blur(110px); opacity:.35; pointer-events:none; z-index:0; }
+  .bg-orbs::before { width:560px; height:560px; background:radial-gradient(circle,#7c3aed,transparent 70%); top:-180px; left:-120px; }
+  .bg-orbs::after { width:620px; height:620px; background:radial-gradient(circle,#06b6d4,transparent 70%); bottom:-220px; right:-140px; }
+  .glass { background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.09); backdrop-filter:blur(14px); }
+  .card-hover { transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+  .card-hover:hover { transform:translateY(-1px); border-color:rgba(139,92,246,.5); box-shadow:0 8px 32px -12px rgba(139,92,246,.45); }
+  .tab-btn.active { background:linear-gradient(135deg,#7c3aed,#06b6d4); color:white; border-color:transparent; }
+  .chip.active { background:#8b5cf6; color:#fff; border-color:#8b5cf6; }
+  .seg.active, .lseg.active, .wseg.active { background:linear-gradient(135deg,#7c3aed,#4f46e5); color:#fff; border-color:transparent; }
+  select, input[type=text], input[type=number], textarea { color-scheme:dark; }
+  .field { background:#0a0f1e; border:1px solid rgba(255,255,255,.1); border-radius:12px; }
+  .field:focus { outline:none; border-color:#8b5cf6; box-shadow:0 0 0 3px rgba(139,92,246,.25); }
+  textarea::-webkit-scrollbar, .scroll-slim::-webkit-scrollbar { width:8px; height:8px; }
+  textarea::-webkit-scrollbar-thumb, .scroll-slim::-webkit-scrollbar-thumb { background:#2a3350; border-radius:8px; }
+  .btn-primary { background:linear-gradient(135deg,#8b5cf6 0%,#6366f1 45%,#06b6d4 100%); transition:filter .15s, transform .1s; }
+  .btn-primary:hover:not(:disabled) { filter:brightness(1.12); } .btn-primary:active:not(:disabled){ transform:scale(.98);} .btn-primary:disabled{ opacity:.55; cursor:wait;}
+  .spinner { width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .7s linear infinite; display:inline-block;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse-glow { 0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.5)} 50%{box-shadow:0 0 0 8px rgba(139,92,246,0)} }
+  .generating { animation:pulse-glow 1.4s infinite; }
+  #wave { width:100%; height:84px; display:block; }
+  .toast { animation:slideIn .25s ease; } @keyframes slideIn{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+  .kbd { font-family:'JetBrains Mono',monospace; font-size:11px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-bottom-width:2px; border-radius:6px; padding:1px 6px; }
+  input[type=range]{ accent-color:#8b5cf6; }
+  .featured-ring { position:relative; }
+  .jsteps{display:flex;align-items:center;gap:6px;margin:9px 0 8px}
+  .jstep{display:flex;align-items:center;gap:4px;font-size:11px;color:#5b6b8c;font-weight:600;white-space:nowrap}
+  .jstep.done{color:#34d399} .jstep.cur{color:#c4b5fd}
+  .jstep.cur span{animation:blink 1s infinite} .jstep.err{color:#f87171}
+  @keyframes blink{50%{opacity:.2}}
+  .jline{flex:1;height:1px;background:rgba(255,255,255,.12);min-width:8px} .jline.err{background:rgba(248,113,113,.6)}
+  .pbar{height:8px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}
+  .pfill{height:100%;border-radius:99px;background:linear-gradient(90deg,#8b5cf6,#06b6d4);transition:width .8s ease;position:relative;overflow:hidden}
+  .pfill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);transform:translateX(-100%);animation:shim 1.3s infinite}
+  @keyframes shim{to{transform:translateX(100%)}}
+  .is-done .pfill::after,.is-err .pfill::after{display:none}
+  .is-err .pfill{background:linear-gradient(90deg,#ef4444,#f59e0b)}
+  .jdetail{font-size:12px;color:#94a3b8;margin-top:7px;line-height:1.45}
+  .jdot{width:8px;height:8px;border-radius:99px;background:#8b5cf6;animation:blink 1s infinite;flex-shrink:0}
+  .is-done .jdot{background:#34d399;animation:none} .is-err .jdot{background:#ef4444;animation:none}
+  .jpct{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:18px;background:linear-gradient(135deg,#c4b5fd,#67e8f9);-webkit-background-clip:text;background-clip:text;color:transparent;min-width:52px;text-align:right}
+  .is-err .jpct{background:linear-gradient(135deg,#f87171,#fbbf24);-webkit-background-clip:text;background-clip:text}
+  .jcal{font-size:11px;color:#5f7095;margin-top:6px}
+  .hint{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:99px;font-size:10px;font-weight:800;color:#b7c2ff;background:rgba(139,92,246,.14);border:1px solid rgba(139,92,246,.45);cursor:help;position:relative;vertical-align:1px;margin-left:5px;font-style:normal}
+  .hint.sm{width:13px;height:13px;font-size:9px}
+  #tippy{position:fixed;z-index:100;max-width:min(238px,calc(100vw - 20px));background:#0d1326;border:1px solid rgba(139,92,246,.5);color:#d9e1f7;font-size:11.5px;line-height:1.55;padding:9px 11px;border-radius:10px;box-shadow:0 12px 32px -8px rgba(0,0,0,.75);text-align:left;pointer-events:none;display:none}
+  #tippy.on{display:block}
+  .jcancel{margin-left:2px;flex-shrink:0;font-size:11px;font-weight:700;color:#fca5a5;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.45);border-radius:99px;padding:2px 10px;transition:background .15s}
+  .jcancel:hover:not(:disabled){background:rgba(239,68,68,.28)} .jcancel:disabled{opacity:.6;cursor:wait}
+  .jstep.cx{color:#fbbf24} .jline.cx{background:rgba(251,191,36,.5)}
+  .is-cancel .pfill{background:linear-gradient(90deg,#f59e0b,#78716c)} .is-cancel .pfill::after{display:none}
+  .is-cancel .jdot{background:#f59e0b;animation:none}
+  .is-cancel .jpct{background:linear-gradient(135deg,#fcd34d,#a8a29e);-webkit-background-clip:text;background-clip:text}
+  .featured-ring::before{ content:''; position:absolute; inset:-1px; border-radius:16px; padding:1px; background:linear-gradient(135deg,#f59e0b,#8b5cf6,#06b6d4); -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0); -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+</style>
+</head>
+<body class="bg-orbs">
+<div id="toasts" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 items-end"></div>
+<div id="offlineBanner" class="hidden relative z-20 bg-red-500/15 border-b border-red-400/40 text-center text-[13px] py-2 px-4 text-red-200">
+  ⚠ <b>Server unreachable.</b> The backend isn't running — start it with <span class="font-mono bg-black/40 px-1.5 py-0.5 rounded">./start.sh</span> in <span class="font-mono">qwen3-tts_studio/</span>, then refresh this page.
+</div>
+<div id="stoppedOverlay" class="hidden fixed inset-0 z-[80] grid place-items-center bg-[#070a13]/95 backdrop-blur-sm">
+  <div class="glass rounded-3xl px-10 py-9 max-w-md mx-4 text-center">
+    <div class="w-16 h-16 mx-auto rounded-2xl grid place-items-center text-3xl font-extrabold" style="background:linear-gradient(135deg,#8b5cf6,#06b6d4)">Q</div>
+    <h2 class="font-extrabold text-[20px] mt-4">Server stopped</h2>
+    <p id="stoppedDetail" class="text-[13px] text-slate-400 mt-2">All models unloaded, process terminated.</p>
+    <p class="text-[12px] text-slate-500 mt-3">You can close this tab.<br>Relaunch anytime from the 🖥️ <b class="text-slate-300">desktop icon</b> — it restarts everything and reopens this page.</p>
+    <div class="font-mono text-[11px] text-slate-600 mt-3">port 8000 is free</div>
+  </div>
+</div>
+
+<!-- ══════════ HEADER ══════════ -->
+<header class="relative z-10 border-b border-white/10 bg-black/30 backdrop-blur-xl sticky top-0">
+  <div class="max-w-[1500px] mx-auto px-4 lg:px-6 py-3 flex items-center gap-3 flex-wrap">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-2xl grid place-items-center font-extrabold text-lg" style="background:linear-gradient(135deg,#8b5cf6,#06b6d4)">Q</div>
+      <div>
+        <div class="font-extrabold tracking-tight text-[17px] leading-tight">Qwen3-TTS <span class="text-violet-300">Studio</span></div>
+        <div class="text-[11px] text-slate-400 tracking-wide">PREMADE AMERICAN VOICES • HIGH QUALITY • 24 kHz</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 ml-auto flex-wrap">
+      <span id="backendBadge" title="Live backend telemetry: torch version, CPU/GPU device and qwen-tts package status. The ↻ Status button refreshes it; the page also re-checks every 30 seconds." class="text-[11px] font-mono px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-300">backend: …</span>
+      <span id="modelBadge" title="Which CustomVoice tier the Studio tab will use. 1.7B unlocks fidelity plus style/emotion control; 0.6B is faster but style-blind." class="text-[11px] font-mono px-2.5 py-1 rounded-full border border-violet-400/30 bg-violet-500/10 text-violet-200">1.7B high-quality</span>
+      <a href="https://github.com/QwenLM/Qwen3-TTS" target="_blank" class="text-[12px] px-3 py-1.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition">★ Qwen3-TTS</a>
+      <button onclick="checkHealth()" title="Re-check backend status, torch/CUDA info and loaded models." class="text-[12px] px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition">↻ Status</button>
+      <button onclick="restartServer()" title="Cleanly restart the backend on the same port (:8000): active jobs are cancelled, memory is dropped, and a fresh server boots. The page reconnects automatically." class="text-[12px] px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition">↻ Restart</button>
+      <button onclick="exitServer()" title="Full stop: cancels jobs, unloads TTS + writer models (frees gigabytes of RAM), and terminates the server. Relaunch anytime from the desktop icon." class="text-[12px] px-3 py-1.5 rounded-full bg-red-500/10 border border-red-400/30 text-red-200 hover:bg-red-500/20 transition">⏻ Exit</button>
+    </div>
+  </div>
+  <!-- tabs -->
+  <div class="max-w-[1500px] mx-auto px-4 lg:px-6 pb-3 flex gap-2">
+    <button data-tab="studio" title="Premade-voice synthesis: pick one of 9 studio timbres (Aiden/Ryan lead), type text, add style direction, generate." class="tab-btn active text-[13px] font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/5 transition">🎙️ Studio <span class="opacity-60 font-normal hidden sm:inline">· premade voices</span></button>
+    <button data-tab="design" title="Voice Design: invent a brand-new timbre purely from a written description — no reference audio needed." class="tab-btn text-[13px] font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/5 transition">✨ Voice Design <span class="opacity-60 font-normal hidden sm:inline">· describe any voice</span></button>
+    <button data-tab="clone" title="Voice Clone: copy any voice from a 3-second reference sample using the Base models." class="tab-btn text-[13px] font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/5 transition">🧬 Voice Clone <span class="opacity-60 font-normal hidden sm:inline">· 3-sec clone</span></button>
+    <button data-tab="script" title="Script Writer: free local LLM drafts a speak-ready script from your topic — unfiltered, no cloud, no key — then sends it to the Studio." class="tab-btn text-[13px] font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/5 transition">✍️ Script <span class="opacity-60 font-normal hidden sm:inline">· free writer</span></button>
+    <span class="ml-auto hidden md:flex items-center gap-2 text-[11px] text-slate-500"><span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> to generate</span>
+  </div>
+</header>
+
+<!-- ══════════ MAIN ══════════ -->
+<main class="relative z-10 max-w-[1500px] mx-auto px-4 lg:px-6 py-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start">
+
+  <!-- ── CENTER ── -->
+  <section class="min-w-0 flex flex-col gap-5">
+
+    <!-- STUDIO PANEL -->
+    <div id="panel-studio" class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-2 flex-wrap">
+        <label class="text-[12px] font-semibold text-slate-300">VOICE<span class="hint" tabindex="0" data-tip="The 9 built-in studio timbres, American voices first. Aiden and Ryan are native-English (🇺🇸) and sound best in English — but every voice speaks all 10 languages, with quality peaking in its native tongue.">?</span></label>
+        <select id="voiceSelect" onchange="selectSpeaker(this.value)" class="field flex-1 min-w-[180px] text-[14px] font-semibold px-3 py-2.5 rounded-xl"></select>
+        <button onclick="previewVoice()" title="Speaks whatever is in the text box with the selected voice — by default a quick 'Hi, my name is…' intro, so auditions are instant." class="text-[12px] px-3 py-2 rounded-full border border-white/15 bg-white/5 hover:bg-white/10 shrink-0">🔊 Preview</button>
+      </div>
+      <div class="flex items-center gap-2 mt-1.5 mb-4">
+        <span id="usBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300 border border-emerald-300/30 shrink-0">★ US HQ</span>
+        <span id="selDesc" class="text-[12px] text-slate-400">Sunny American male voice with a clear midrange.</span>
+      </div>
+
+      <label class="text-[12px] font-semibold text-slate-300 tracking-wide">TEXT TO SPEAK<span class="hint" tabindex="0" data-tip="Everything typed here is spoken verbatim. Punctuation steers pacing: commas add pauses, '...' adds hesitation, ALL CAPS adds emphasis, and line breaks add longer pauses. Max 8000 characters — longer texts synthesize slower and need a higher Max-tokens cap (2048 tokens ≈ up to ~3 minutes of audio).">?</span></label>
+      <div class="relative mt-1.5">
+        <textarea id="text" rows="6" maxlength="8000" class="field w-full text-[14px] leading-relaxed px-4 py-3 resize-y" placeholder="Type or paste anything — narration, dialogue, ads, stories…">Hi, my name is Aiden.</textarea>
+        <div class="absolute bottom-2 right-3 text-[11px] font-mono text-slate-500"><span id="charCount">0</span>/8000</div>
+      </div>
+      <div class="flex gap-2 mt-2 flex-wrap items-center">
+        <span class="text-[11px] text-slate-500">Try:<span class="hint" tabindex="0" data-tip="Ready-made demo scripts. Each one also auto-fills a matching Style direction below, so you immediately hear what style control does. A fast way to audition voices.">?</span></span>
+        <button class="sampleBtn text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10" data-sample="ad">📢 Ad read</button>
+        <button class="sampleBtn text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10" data-sample="story">📖 Story</button>
+        <button class="sampleBtn text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10" data-sample="podcast">🎧 Podcast intro</button>
+        <button class="sampleBtn text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10" data-sample="emotional">💛 Emotional</button>
+        <button onclick="clearText()" class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 ml-auto">Clear</button>
+      </div>
+
+      <div class="grid sm:grid-cols-2 gap-3 mt-4">
+        <div>
+          <label class="text-[12px] font-semibold text-slate-300">LANGUAGE <span class="font-normal text-slate-500">· 10 + auto</span><span class="hint" tabindex="0" data-tip="Forces pronunciation rules for one language, or Auto to detect it per request. Always match the language you actually wrote in — a wrong setting causes mispronounced words. Aiden and Ryan peak in English; Vivian and Serena peak in Chinese.">?</span></label>
+          <select id="language" class="field w-full mt-1.5 text-[13px] px-3 py-2.5"></select>
+        </div>
+        <div>
+          <label class="text-[12px] font-semibold text-slate-300">MODEL <span class="font-normal text-slate-500">· quality vs speed</span><span class="hint" tabindex="0" data-tip="1.7B High Quality: best fidelity and the ONLY tier with style/emotion control (~4 GB download, slower on CPU). 0.6B Fast: lighter and quicker, but it silently ignores the Style box. Judge voices on 1.7B; use 0.6B for rapid drafts.">?</span></label>
+          <div class="grid grid-cols-2 gap-2 mt-1.5">
+            <button data-model="custom-1.7B" class="seg active text-left text-[12px] px-3 py-2 rounded-xl border border-white/10 bg-white/5"><b>1.7B ⭐ High Quality</b><br><span class="opacity-70 text-[11px]">Best fidelity + style control</span></button>
+            <button data-model="custom-0.6B" class="seg text-left text-[12px] px-3 py-2 rounded-xl border border-white/10 bg-white/5"><b>0.6B ⚡ Fast</b><br><span class="opacity-70 text-[11px]">Quicker, lighter, no style</span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 rounded-xl border border-violet-400/20 bg-violet-500/5 p-3.5">
+        <div class="flex items-center gap-2">
+          <label class="text-[12px] font-semibold text-violet-200">STYLE / EMOTION INSTRUCTION <span class="font-normal opacity-70">(1.7B only)</span><span class="hint" tabindex="0" data-tip="Plain-English acting direction for the read: emotion, pace, persona ('narrate like a sleepy bedtime story'). 1.7B ONLY — on 0.6B this box disables itself because the small model has no instruction control. Keep it to one concrete sentence; specific beats flowery. Click any chip below to fill it instantly.">?</span></label>
+          <span id="instructNote" class="ml-auto text-[11px] text-emerald-300">● active on 1.7B</span>
+        </div>
+        <input id="instruct" type="text" maxlength="500" placeholder="e.g. Speak in a cheerful, energetic tone with a natural podcast cadence…" class="field w-full mt-2 text-[13px] px-3 py-2.5" />
+        <div class="flex gap-1.5 mt-2 flex-wrap" id="styleChips">
+          <button class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60" data-style="Speak in a cheerful and energetic tone.">😄 Cheerful</button>
+          <button class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60" data-style="Speak in a calm, warm, reassuring tone, slightly slow.">🧘 Calm</button>
+          <button class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60" data-style="Speak like an excited movie-trailer narrator, dynamic and punchy.">🎬 Trailer</button>
+          <button class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60" data-style="Whisper softly and intimately, gentle and close.">🤫 Whisper</button>
+          <button class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60" data-style="Speak with deep sadness and tenderness, slow and emotional.">😢 Sad</button>
+          <button class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60" data-style="Speak in an angry, intense tone with strong emphasis.">🔥 Angry</button>
+          <button class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60" data-style="Speak like a professional news anchor: clear, neutral, authoritative.">📺 News anchor</button>
+          <button class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60" data-style="">✕ None</button>
+        </div>
+      </div>
+
+      <details class="mt-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+        <summary class="text-[12px] font-semibold cursor-pointer text-slate-300">⚙️ ADVANCED SAMPLING <span class="font-normal text-slate-500">· temperature, top-p/k, tokens, seed</span><span class="hint" tabindex="0" data-tip="Fine sampling controls borrowed from text LLMs. The checkpoint defaults suit almost all speech — touch these only with a reason: voice too flat (nudge temperature up), too chaotic or mispronouncing (nudge it down), takes cutting off early (raise Max tokens), or you need the identical take twice (set a Seed).">?</span></summary>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+          <label class="text-[11px] text-slate-400">Temperature <span id="tempVal" class="font-mono text-slate-200">default</span><span class="hint" tabindex="0" data-tip="Sampling randomness, roughly 0.1–2.0. Lower = steadier, more repeatable delivery; higher = more varied and expressive, but more prone to odd pronunciations. The checkpoint default (≈0.9) is tuned for natural speech — leave the slider at 'default' unless a voice needs taming or loosening.">?</span><input id="temperature" type="range" min="0.1" max="2" step="0.05" value="1" class="w-full" oninput="syncAdv()"><button onclick="resetAdv('temperature')" class="underline opacity-60">reset to default</button></label>
+          <label class="text-[11px] text-slate-400">Top-p <span id="toppVal" class="font-mono text-slate-200">default</span><span class="hint" tabindex="0" data-tip="Nucleus sampling: at every step the model chooses from the smallest set of sound-options covering this much probability. 1.0 = full choice (default, most natural). Lowering toward 0.8–0.9 tightens delivery and fixes rambling, but can flatten emotion.">?</span><input id="top_p" type="range" min="0.1" max="1" step="0.05" value="1" class="w-full" oninput="syncAdv()"><button onclick="resetAdv('top_p')" class="underline opacity-60">reset</button></label>
+          <label class="text-[11px] text-slate-400">Top-k (int, empty = default)<span class="hint" tabindex="0" data-tip="Hard-caps every choice to the K most likely sound-tokens. Rarely useful for TTS: very low values make speech robotic, high values equal default. Leave empty unless you are deliberately experimenting.">?</span><input id="top_k" type="number" min="1" max="500" placeholder="default" class="field w-full mt-1 text-[13px] px-2 py-1.5"></label>
+          <label class="text-[11px] text-slate-400">Max new tokens<span class="hint" tabindex="0" data-tip="Hard ceiling on generated audio-code tokens. The 12 Hz codec emits ~12 tokens per audio second, so 2048 ≈ up to ~170 s max. If a long text stops mid-sentence, it hit this cap — raise toward 4096. Higher values also allow longer (slower) runs.">?</span><input id="max_tokens" type="number" min="128" max="4096" value="2048" class="field w-full mt-1 text-[13px] px-2 py-1.5"></label>
+          <label class="text-[11px] text-slate-400">Seed (empty = random)<span class="hint" tabindex="0" data-tip="Freezes randomness so the same text + settings reproduce the identical take — perfect for A/B comparisons or re-generating a keeper. Empty means a fresh random take every time. The dice button rolls a new random seed for you.">?</span><span class="flex gap-1 mt-1"><input id="seed" type="number" placeholder="random" class="field w-full text-[13px] px-2 py-1.5"><button onclick="randomSeed()" title="Roll a random seed for a fresh take." class="px-2 rounded-lg bg-white/10 border border-white/10">🎲</button></span></label>
+          <div class="text-[11px] text-slate-500 self-end leading-relaxed">Defaults come from the checkpoint's <span class="font-mono">generate_config.json</span>. Lower temperature = steadier.</div>
+        </div>
+      </details>
+
+      <label class="flex items-center gap-2 mt-4 mb-1 text-[12px] text-slate-300 cursor-pointer select-none"><input id="streamMode" type="checkbox" checked class="w-4 h-4 accent-violet-500"> ⚡ Stream mode — hear part 1 fast, rest renders after<span class="hint" tabindex="0" data-tip="Splits long text into sentence parts and synthesizes them one by one. Part 1 auto-plays the moment it exists (often many times sooner than waiting for the full file), progress becomes real parts-done counting instead of an estimate, and everything is stitched into one WAV at the end. Single-sentence texts automatically use the normal path.">?</span></label>
+      <div id="jbar-studio"></div>
+      <button id="genBtn" onclick="generate()" title="Sends the current text, voice, language, style and sampling settings to the single-file worker queue and shows live progress in the status bar below. Shortcut: Ctrl+Enter from anywhere." class="btn-primary w-full mt-4 rounded-2xl py-3.5 font-bold text-[15px] tracking-tight">✨ Generate speech <span class="font-normal opacity-70">· Ctrl+Enter</span></button>
+      <div id="genStatus" class="text-[12px] text-slate-400 mt-2 text-center">Ready — first run downloads the model (~2–4 GB) then synthesizes.</div>
+    </div>
+
+    <!-- DESIGN PANEL -->
+    <div id="panel-design" class="glass rounded-2xl p-5 hidden">
+      <h3 class="font-bold text-[16px]">✨ Voice Design <span class="text-[12px] font-medium text-slate-400">· describe ANY voice in words (1.7B VoiceDesign)</span><span class="hint" tabindex="0" data-tip="VoiceDesign invents a brand-new timbre purely from your written description — no reference audio needed. Same description plus same seed reproduces roughly the same voice. Sculpt it by editing concrete words (age, accent, pitch, pace, flaws).">?</span></h3>
+      <p class="text-[12px] text-slate-400 mt-1">Example: “Young American female streamer, bright and playful, fast-paced with lots of energy.” The model invents the timbre from your description.</p>
+      <label class="text-[12px] font-semibold text-slate-300 block mt-4">TEXT TO SPEAK<span class="hint" tabindex="0" data-tip="The lines your designed voice will perform. Keep the first test to 1–2 sentences so iterations stay fast, then scale up to full scripts once you love the timbre.">?</span></label>
+      <textarea id="d_text" rows="4" class="field w-full mt-1.5 text-[14px] px-4 py-3" placeholder="What should your designed voice say?">Hey everyone, welcome back to the show! Today we're diving into something truly mind-blowing.</textarea>
+      <div class="grid sm:grid-cols-2 gap-3 mt-3">
+        <div><label class="text-[12px] font-semibold text-slate-300">LANGUAGE<span class="hint" tabindex="0" data-tip="Pronunciation rules for the designed voice. Match the language you are writing in — English text with English selected gives the most predictable results.">?</span></label><select id="d_language" class="field w-full mt-1.5 text-[13px] px-3 py-2.5"></select></div>
+        <div><label class="text-[12px] font-semibold text-slate-300">INSPIRATION PRESETS<span class="hint" tabindex="0" data-tip="Starting-point recipes showing the format that works: age + gender/accent + pitch/pace + emotion. Click one to fill the description box, then edit the words to taste.">?</span></label>
+          <div class="flex gap-1.5 mt-1.5 flex-wrap" id="designPresets">
+            <button class="dpreset text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10" data-p="Deep movie-trailer male voice, gravelly and powerful, slow dramatic pacing.">🎬 Trailer male</button>
+            <button class="dpreset text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10" data-p="Young American female podcaster, warm and friendly, conversational pace.">🎧 Podcaster</button>
+            <button class="dpreset text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10" data-p="Elderly British storyteller, gentle and wise, slow deliberate rhythm with warmth.">📖 Storyteller</button>
+          </div>
+        </div>
+      </div>
+      <label class="text-[12px] font-semibold text-slate-300 block mt-3">VOICE DESCRIPTION <span class="text-red-300">*required</span><span class="hint" tabindex="0" data-tip="The actual voice recipe — REQUIRED. Name concrete traits: age, gender, accent, pitch, pace, emotion, even flaws ('gravelly', 'breathy', 'nasal'). Vague prompts like 'a nice voice' produce generic results; specific prompts produce characters.">?</span></label>
+      <textarea id="d_instruct" rows="3" class="field w-full mt-1.5 text-[13px] px-4 py-3" placeholder="Describe age, gender, accent, pitch, pace, emotion…">Young American male streamer, bright and high-energy, fast-paced, playful and expressive.</textarea>
+      <div id="jbar-design"></div>
+      <button id="designBtn" onclick="generateDesign()" title="Invents the timbre from your description and speaks your text with it. Takes a few minutes on CPU — the live status bar below tracks real progress." class="btn-primary w-full mt-4 rounded-2xl py-3.5 font-bold text-[15px]">✨ Design & generate</button>
+      <div id="designStatus" class="text-[12px] text-slate-400 mt-2 text-center"></div>
+    </div>
+
+    <!-- CLONE PANEL -->
+    <div id="panel-clone" class="glass rounded-2xl p-5 hidden">
+      <h3 class="font-bold text-[16px]">🧬 Voice Clone <span class="text-[12px] font-medium text-slate-400">· 3-second rapid clone (Base model)</span><span class="hint" tabindex="0" data-tip="Voice Clone copies ANY voice from a short sample using the Base models (state-of-the-art 3-second cloning). It mimics timbre and cadence — output quality depends almost entirely on a clean, clear reference clip: one speaker, no music, minimal noise.">?</span></h3>
+      <div class="grid lg:grid-cols-2 gap-4 mt-4">
+        <div class="rounded-xl border border-white/10 bg-black/20 p-4">
+          <label class="text-[12px] font-semibold">1 · REFERENCE AUDIO <span class="text-red-300">* 3s+ clear speech</span><span class="hint" tabindex="0" data-tip="The voice sample to copy: 3+ seconds of clear speech, one speaker, minimal background noise, no music (WAV/MP3, under 25 MB). Studio-clean recordings clone far better than phone-in-a-café audio. Upload a file or record with your mic below.">?</span></label>
+          <input id="c_file" type="file" accept="audio/*" title="Choose a reference audio file from your device (WAV, MP3, M4A — under 25 MB)." class="mt-2 text-[12px] w-full file:mr-3 file:px-3 file:py-1.5 file:rounded-full file:border-0 file:bg-violet-600 file:text-white file:text-[12px]" />
+          <div class="flex gap-2 mt-2">
+            <button id="recBtn" onclick="toggleRec()" title="Record a reference clip with your microphone (converted to WAV in-browser) for instant cloning without uploading a file." class="text-[12px] px-3 py-1.5 rounded-full bg-white/5 border border-white/10">🎤 Record mic</button>
+            <audio id="refPreview" controls class="hidden w-full mt-1 h-8"></audio>
+          </div>
+          <label class="text-[12px] font-semibold block mt-3">2 · TRANSCRIPT OF REFERENCE <span id="creq" class="text-red-300">*</span><span class="hint" tabindex="0" data-tip="The EXACT words spoken in the reference clip. The model aligns text to audio from this, so typos and paraphrases directly hurt the clone — transcribe carefully. Or skip it entirely with x-vector-only mode below (slightly lower fidelity).">?</span></label>
+          <textarea id="c_reftext" rows="2" class="field w-full mt-1.5 text-[13px] px-3 py-2" placeholder="Type exactly what is said in the reference audio…">Okay. Yeah. I resent you. I love you. I respect you. But you know what? You blew it! And thanks to you.</textarea>
+          <label class="flex items-center gap-2 mt-2 text-[12px] text-slate-300"><input id="c_xvec" type="checkbox" class="w-4 h-4" onchange="document.getElementById('creq').style.display=this.checked?'none':''"> x-vector only <span class="text-slate-500">· no transcript needed, slightly lower quality</span><span class="hint" tabindex="0" data-tip="Clones from the speaker embedding alone — no transcript required. Faster and more forgiving of sloppy reference audio, but prosody and accent accuracy drop a notch. Best for quick drafts; use full transcript mode for final takes.">?</span></label>
+        </div>
+        <div class="rounded-xl border border-white/10 bg-black/20 p-4">
+          <label class="text-[12px] font-semibold">3 · WHAT SHOULD THE CLONE SAY?<span class="hint" tabindex="0" data-tip="The lines the cloned voice will perform. Keep the language consistent with the reference for the best accent match — cross-language cloning works, but adds an accent from the reference speaker's tongue.">?</span></label>
+          <textarea id="c_text" rows="4" class="field w-full mt-1.5 text-[14px] px-3 py-2" placeholder="Target sentence…">Hey, this is my cloned voice saying anything I type. Pretty amazing, right?</textarea>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <div><label class="text-[11px] text-slate-400">Language<span class="hint" tabindex="0" data-tip="Output language for the clone. Ideally matches the reference clip's language — same-language cloning preserves the accent best.">?</span></label><select id="c_language" class="field w-full mt-1 text-[13px] px-2 py-2"></select></div>
+            <div><label class="text-[11px] text-slate-400">Clone model<span class="hint" tabindex="0" data-tip="Base 1.7B clones more faithfully (recommended); Base 0.6B is faster and lighter. Both need the same 3-second reference — quality difference shows in accent and prosody fidelity.">?</span></label><select id="c_model" class="field w-full mt-1 text-[13px] px-2 py-2"><option value="base-1.7B">Base 1.7B — best clone ⭐</option><option value="base-0.6B">Base 0.6B — faster</option></select></div>
+          </div>
+          <div id="jbar-clone"></div>
+          <button id="cloneBtn" onclick="generateClone()" title="Builds the clone from your reference audio and speaks the target text. First run loads the Base weights, so allow extra time — the live status bar tracks real progress." class="btn-primary w-full mt-3 rounded-2xl py-3 font-bold text-[14px]">🧬 Clone & generate</button>
+          <div id="cloneStatus" class="text-[12px] text-slate-400 mt-2 text-center"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCRIPT PANEL -->
+    <div id="panel-script" class="glass rounded-2xl p-5 hidden">
+      <h3 class="font-bold text-[16px]">✍️ Script Writer <span class="text-[12px] font-medium text-slate-400">· free local LLM, unfiltered</span><span class="hint" tabindex="0" data-tip="A free script generator powered by a local Ollama model on this machine — no cloud, no API key, no cost, no content lectures. Pick a scenario, describe your topic, and get a speak-ready script you can fire straight into the Studio. Drafting briefly parks the TTS voices to fit RAM; they reload on your next Generate.">?</span></h3>
+      <p class="text-[12px] text-slate-400 mt-1">Topic in → performance-ready script out. Highest quality + uncensored by default (9B abliterated).</p>
+      <label class="text-[12px] font-semibold text-slate-300 block mt-4">TOPIC<span class="hint" tabindex="0" data-tip="The subject of your script — a product, an idea, a character, a mood, anything ('a haunted lighthouse', 'my coffee subscription', 'why Mondays feel evil'). Specific, visual topics produce dramatically better scripts than vague ones.">?</span></label>
+      <input id="s_topic" type="text" maxlength="300" placeholder="e.g. a haunted lighthouse that grants wishes with a price…" class="field w-full mt-1.5 text-[14px] px-4 py-3" />
+      <label class="text-[12px] font-semibold text-slate-300 block mt-4">SCENARIO TYPE<span class="hint" tabindex="0" data-tip="The genre and shape of the piece. Each scenario carries its own professional direction (hooks and CTAs for ads, A:/B: labels for dialogue, dread-first rules for horror). The writer follows it strictly, so pick the closest match.">?</span></label>
+      <div id="scriptGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-2"></div>
+      <div class="mt-4 rounded-xl border border-violet-400/20 bg-violet-500/5 p-3.5">
+        <label class="text-[12px] font-semibold text-violet-200">WRITER BACKEND — all free<span class="hint" tabindex="0" data-tip="Local Ollama: 100% free, private, no key — runs on this machine (slower, drafts park the TTS voices to fit RAM). Groq/Gemini: their free tiers — datacenter GPUs, 70B-class quality in seconds, zero RAM touched. Cloud needs a free key (60-second signup, link provided); keys are verified, stored chmod-600 server-side, and never shown again. If cloud ever hiccups, the job auto-falls-back to the local writer.">?</span></label>
+        <div class="flex gap-2 mt-2 flex-wrap" id="providerSeg"></div>
+        <div id="keyBox" class="hidden mt-2 flex items-center gap-2 flex-wrap">
+          <span id="keyStatus" class="text-[12px]"></span>
+          <a id="keyLink" href="#" target="_blank" class="text-[12px] underline text-violet-300">get free key →</a>
+          <input id="keyInput" type="password" autocomplete="off" placeholder="paste key here" class="field text-[12px] px-2.5 py-1.5 w-52" />
+          <button onclick="saveKey()" class="text-[12px] px-3 py-1.5 rounded-full bg-violet-600 hover:bg-violet-500 font-semibold">Save & verify</button>
+          <button id="keyForget" onclick="forgetKey()" style="display:none" class="text-[12px] px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10">Forget</button>
+        </div>
+      </div>
+      <div class="grid sm:grid-cols-3 gap-3 mt-4">
+        <div>
+          <label class="text-[12px] font-semibold text-slate-300">TONE (optional)<span class="hint" tabindex="0" data-tip="Free-form flavor layered over the scenario — 'gritty', 'sultry', 'deadpan'. Leave empty to let the genre decide. Click a chip or type your own.">?</span></label>
+          <input id="s_tone" type="text" maxlength="120" placeholder="e.g. gritty but hopeful" class="field w-full mt-1.5 text-[13px] px-3 py-2.5" />
+          <div class="flex gap-1.5 mt-1.5 flex-wrap" id="toneChips"></div>
+        </div>
+        <div>
+          <label class="text-[12px] font-semibold text-slate-300">LENGTH<span class="hint" tabindex="0" data-tip="Target size. Hook ≈ 60 words (social clips), Standard ≈ 180 (full reads), Extended ≈ 400 (stories and episodes). Longer pieces take the writer a few minutes.">?</span></label>
+          <div class="flex flex-col gap-2 mt-1.5" id="lenSeg">
+            <button data-len="hook" class="lseg text-left text-[12px] px-3 py-2 rounded-xl border border-white/10 bg-white/5"><b>⚡ Hook</b> <span class="opacity-70">~60 words</span></button>
+            <button data-len="standard" class="lseg active text-left text-[12px] px-3 py-2 rounded-xl border border-white/10 bg-white/5"><b>📄 Standard</b> <span class="opacity-70">~180 words</span></button>
+            <button data-len="extended" class="lseg text-left text-[12px] px-3 py-2 rounded-xl border border-white/10 bg-white/5"><b>📚 Extended</b> <span class="opacity-70">~400 words</span></button>
+          </div>
+        </div>
+        <div>
+          <label class="text-[12px] font-semibold text-slate-300">WRITER MODEL<span class="hint" tabindex="0" data-tip="Which local LLM drafts. Best (9B abliterated): sharpest prose, fully unfiltered — briefly parks TTS voices to fit RAM. Balanced (8B): strong and lighter. Fast (3B): drafts in seconds, simpler prose. Only models already pulled on this machine are clickable.">?</span></label>
+          <div class="flex flex-col gap-2 mt-1.5" id="writerSeg"></div>
+        </div>
+      </div>
+      <div id="jbar-script"></div>
+      <button id="scriptBtn" onclick="generateScript()" title="Draft a speak-ready script from your topic, scenario, tone and length using the selected local model. Free, unlimited, unfiltered." class="btn-primary w-full mt-4 rounded-2xl py-3.5 font-bold text-[15px]">✍️ Write my script <span class="font-normal opacity-70">· Ctrl+Enter</span></button>
+      <div id="scriptStatus" class="text-[12px] text-slate-400 mt-2 text-center"></div>
+      <label class="text-[12px] font-semibold text-slate-300 block mt-4">SCRIPT <span id="scriptWords" class="font-mono font-normal text-slate-500"></span><span class="hint" tabindex="0" data-tip="Your generated script, fully editable. Polish any line, then hit Send to Studio to speak it — or Copy to use it anywhere else.">?</span></label>
+      <textarea id="scriptOut" rows="8" class="field w-full mt-1.5 text-[14px] leading-relaxed px-4 py-3" placeholder="Your script will appear here…"></textarea>
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <button onclick="copyScript()" title="Copy the script to your clipboard." class="text-[13px] font-semibold px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10">📋 Copy script</button>
+        <button onclick="sendToStudio()" title="Fill the Studio text box with this script and jump to the Studio tab, ready to generate audio." class="text-[13px] font-semibold px-3 py-2.5 rounded-xl bg-violet-600/30 border border-violet-400/40 hover:bg-violet-600/50">🎙️ Send to Studio →</button>
+      </div>
+      <div class="mt-4 pt-4 border-t border-white/10">
+        <div class="flex items-center gap-2 flex-wrap">
+          <b class="text-[12px] tracking-wide">ONE-CLICK PIPELINE<span class="hint" tabindex="0" data-tip="Zero copy-paste: drafts the script AND speaks it back-to-back. Uses the voice picked here plus the Studio tab's language, style direction and model tier. Watch both stages live in the status bar above — drafting first, then synthesis.">?</span></b>
+          <select id="pipeVoice" title="Voice that will speak the finished script." class="field text-[13px] px-3 py-2 rounded-xl"></select>
+          <span class="text-[11px] text-slate-500">+ Studio's language · style · model</span>
+        </div>
+        <button id="pipeBtn" onclick="writeAndSpeak()" title="Draft the script, then immediately synthesize it with the chosen voice and auto-play. One click, topic to audio." class="btn-primary w-full mt-3 rounded-2xl py-3.5 font-bold text-[15px]">✍️ → 🔊 Write &amp; Speak in one click</button>
+      </div>
+    </div>
+
+    <!-- HOW IT WORKS -->
+    <div class="glass rounded-2xl p-5 text-[12.5px] text-slate-400 leading-relaxed">
+      <b class="text-slate-200">How it works</b> · CustomVoice = 9 premium preset timbres (this Studio). VoiceDesign = invent a voice from a text description (1.7B only). Voice Clone = copy any voice from a 3-second sample (Base models, <span class="font-mono">x_vector_only_mode</span> skips the transcript). All models stream with ~97 ms first-packet latency, 24 kHz output, 10 languages. Instruct-style control (“speak happily…”) is a <b class="text-slate-200">1.7B-only</b> feature — the 0.6B models ignore it.
+    </div>
+  </section>
+
+  <!-- ── RIGHT: player + history ── -->
+  <aside class="flex flex-col gap-5 xl:sticky xl:top-[118px]">
+    <div class="glass rounded-2xl p-5 featured-ring">
+      <div class="flex items-center justify-between">
+        <h2 class="font-bold text-[14px]">NOW PLAYING<span class="hint" tabindex="0" data-tip="Live frequency visualizer fed by real FFT data from the audio element — not decoration; it dances only while sound plays. Download saves the exact 24 kHz WAV file; Replay restarts it from the top.">?</span></h2>
+        <span id="outMeta" class="text-[10px] font-mono text-slate-500">24 kHz · wav</span>
+      </div>
+      <canvas id="wave"></canvas>
+      <audio id="player" controls class="w-full mt-1 h-9"></audio>
+      <div id="outInfo" class="text-[12px] text-slate-400 mt-2">Nothing generated yet — pick <b class="text-slate-200">Aiden 🇺🇸</b> and hit Generate.</div>
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <a id="dlBtn" href="#" download title="Download the current take as a 24 kHz WAV file." class="text-center text-[13px] font-semibold px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 pointer-events-none opacity-40">⬇ Download WAV</a>
+        <button onclick="replay()" title="Restart the current audio from the beginning." class="text-[13px] font-semibold px-3 py-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10">↻ Replay</button>
+      </div>
+    </div>
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-[14px]">LIBRARY <span id="histCount" class="text-slate-500 font-medium"></span><span class="hint" tabindex="0" data-tip="Every finished generation auto-saves here as a 24 kHz WAV with timestamp and file size. ▶ previews it in the player above, ⬇ downloads it, ✕ deletes it from disk. The list refreshes after each completed job.">?</span></h2>
+        <button onclick="loadHistory()" class="text-[12px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10">↻</button>
+      </div>
+      <div id="history" class="flex flex-col gap-2 max-h-[46vh] overflow-y-auto scroll-slim pr-1 text-[13px]"></div>
+    </div>
+  </aside>
+</main>
+
+<footer class="relative z-10 text-center text-[11px] text-slate-600 pb-8">Qwen3-TTS by Alibaba Qwen Team (Apache-2.0) · Studio UI wraps the official <span class="font-mono">qwen-tts</span> package · voices: Ryan & Aiden 🇺🇸 + 7 more · <span id="footInfo"></span></footer>
+
+<script>
+/* ═════════ state ═════════ */
+let VOICES=[], LANGS=[], MODELS={};
+let selSpeaker='Aiden', selModel='custom-1.7B';
+let autoIntroText='Hi, my name is Aiden.';
+let lastURL=null, audioCtx=null, analyser=null, waveAnim=null;
+
+const SAMPLES={
+ ad:{t:"Tired of boring mornings? Meet Sunrise Brew — bold flavor, zero bitterness, ready in thirty seconds. Sunrise Brew. Wake up and win the day.",i:"Speak like an excited commercial narrator, punchy and confident with strong rhythmic drive."},
+ story:{t:"The old lighthouse had been dark for forty years — until one stormy night, against all reason, its light flickered back on.",i:"Speak like a mysterious storyteller, slow and suspenseful with a low intimate tone."},
+ podcast:{t:"Welcome back to Deep Dive, the show where we unpack the ideas shaping tomorrow. I'm your host, and today we're talking about the future of voice.",i:"Speak like a warm podcast host, friendly and conversational with natural pacing."},
+ emotional:{t:"I waited all evening by the window, hoping you'd come. And when you finally did… I remembered why I never stopped believing.",i:"Speak with deep tenderness and quiet emotion, slow and heartfelt."}
+};
+
+const $=id=>document.getElementById(id);
+/* Report browser-side crashes back to errors.log so UI bugs are diagnosable too. */
+window.addEventListener('error',e=>{ try{fetch('/api/log/client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({msg:String((e&&e.message)||(e&&e.error)||'error').slice(0,500),url:location.href.slice(0,200),line:String(e.lineno||'')})})}catch(_){} });
+window.addEventListener('unhandledrejection',e=>{ try{fetch('/api/log/client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({msg:('promise: '+String(e.reason)).slice(0,500),url:location.href.slice(0,200),line:''})})}catch(_){} });
+/* Viewport-aware tooltips: CSS alone can't see screen edges, so one shared
+   popup (appended to body = no clipping from scroll panels or glass filters)
+   is measured and clamped inside the viewport on every show. */
+const tipEl=document.createElement('div'); tipEl.id='tippy'; tipEl.setAttribute('role','tooltip'); document.body.appendChild(tipEl);
+let tipFor=null;
+function showTip(el){
+  const txt=(el.dataset&&el.dataset.tip)||el.title||'';
+  if(!txt) return;
+  tipEl.textContent=txt; tipEl.classList.add('on');
+  tipEl.style.visibility='hidden'; tipEl.style.left='0px'; tipEl.style.top='0px';
+  const r=el.getBoundingClientRect(), gap=9, pad=10;
+  const w=tipEl.offsetWidth, h=tipEl.offsetHeight;
+  let left=Math.round(r.left+r.width/2-w/2);
+  left=Math.max(pad,Math.min(left,window.innerWidth-w-pad));
+  let top=Math.round(r.top-h-gap);
+  if(top<pad) top=Math.round(r.bottom+gap);           // flip below when headroom is short
+  top=Math.max(pad,Math.min(top,window.innerHeight-h-pad));
+  tipEl.style.left=left+'px'; tipEl.style.top=top+'px';
+  tipEl.style.visibility='visible'; tipFor=el;
+}
+function hideTip(){ tipEl.classList.remove('on'); tipFor=null; }
+document.addEventListener('mouseover',e=>{ const h=e.target&&e.target.closest?e.target.closest('.hint'):null; if(h){ if(tipFor!==h) showTip(h); } else if(tipFor) hideTip(); });
+document.addEventListener('mouseout',e=>{ if(tipFor&&!(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('.hint'))) hideTip(); });
+document.addEventListener('click',e=>{ const h=e.target&&e.target.closest?e.target.closest('.hint'):null; if(h){ if(tipFor===h) hideTip(); else showTip(h); } else hideTip(); });
+document.addEventListener('focusin',e=>{ const h=e.target&&e.target.closest?e.target.closest('.hint'):null; if(h) showTip(h); });
+document.addEventListener('focusout',()=>hideTip());
+window.addEventListener('scroll',()=>hideTip(),true);
+window.addEventListener('resize',()=>hideTip());
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') hideTip(); });
+function toast(msg, ok=true){ const d=document.createElement('div'); d.className='toast glass rounded-xl px-4 py-2.5 text-[13px] max-w-sm '+(ok?'border-emerald-400/40':'border-red-400/50'); d.textContent=msg; $('toasts').appendChild(d); setTimeout(()=>{d.style.opacity='0';d.style.transition='opacity .4s';setTimeout(()=>d.remove(),400)},3600); }
+/* Friendly error: "Failed to fetch" almost always means the backend is down. */
+function friendlyErr(e){
+  const m=String((e&&e.message)||e||'');
+  if(/failed to fetch|networkerror|load failed|abort/i.test(m))
+    return 'Cannot reach the server — it may have stopped. Start it with ./start.sh, refresh, and try again.';
+  return m;
+}
+
+/* ═════════ init ═════════ */
+async function init(){
+  try{
+    const r=await fetch('/api/voices'); const j=await r.json();
+    VOICES=j.voices; LANGS=j.languages; MODELS=j.models;
+  }catch(e){ VOICES=[]; }
+  if(!VOICES.length){ // offline fallback mirror
+    VOICES=[{id:'Aiden',label:'Aiden',gender:'Male',native_language:'English',region:'American',flag:'🇺🇸',description:'Sunny American male voice with a clear midrange.',tags:['american','male'],featured:true,best_for:'Flagship US voice'},{id:'Ryan',label:'Ryan',gender:'Male',native_language:'English',region:'American',flag:'🇺🇸',description:'Dynamic male voice with strong rhythmic drive.',tags:['american','male'],featured:true,best_for:'Promos'}];
+    LANGS=['Auto','English','Chinese','Japanese','Korean','French','German','Spanish','Portuguese','Russian','Italian'];
+  }
+  for(const id of ['language','d_language','c_language']){ $(id).innerHTML=LANGS.map(l=>`<option ${l==='English'?'selected':''}>${l}</option>`).join(''); }
+  renderVoices(); selectSpeaker('Aiden'); fillPipeVoices(); checkHealth(); loadHistory(); syncCounts(); drawIdleWave(); loadScriptMeta();
+  document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){ e.preventDefault(); const tab=document.querySelector('.tab-btn.active').dataset.tab; if(tab==='studio')generate(); else if(tab==='design')generateDesign(); else if(tab==='script')generateScript(); else generateClone(); }});
+}
+function syncCounts(){ $('charCount').textContent=$('text').value.length; }
+document.addEventListener('input',e=>{ if(e.target.id==='text')syncCounts(); });
+
+/* ═════════ voices sidebar ═════════ */
+function renderVoices(){
+  const sel=$('voiceSelect'); if(!sel||!VOICES.length) return;
+  const us=VOICES.filter(v=>(v.tags||[]).includes('american'));
+  const rest=VOICES.filter(v=>!(v.tags||[]).includes('american'));
+  const opt=v=>`<option value="${v.id}"${v.id===selSpeaker?' selected':''}>${v.flag||''} ${v.label} — ${v.description||''}</option>`;
+  sel.innerHTML=`<optgroup label="🇺🇸 American (best in English)">${us.map(opt).join('')}</optgroup><optgroup label="Other premade voices">${rest.map(opt).join('')}</optgroup>`;
+  sel.title='Premade voice — grouped American-first. Every voice speaks all 10 languages.';
+}
+function selectSpeaker(id){
+  selSpeaker=id; renderVoices();
+  const pv=$('pipeVoice'); if(pv&&pv.options.length) pv.value=id;
+  const vs=$('voiceSelect'); if(vs) vs.value=id;
+  const v=VOICES.find(x=>x.id===id)||{label:id,description:'',flag:''};
+  $('selDesc').textContent=(v.flag?v.flag+' ':'')+(v.description||'')+` · ${v.gender||'?'} · ${v.native_language||'multilingual'}`;
+  const badge=$('usBadge'); if(badge) badge.style.display=(v.tags||[]).includes('american')?'':'none';
+  const nm=v.label||id, t=$('text').value.trim();
+  if(!t||t===autoIntroText){ autoIntroText='Hi, my name is '+nm+'.'; $('text').value=autoIntroText; syncCounts(); }
+}
+function clearText(){ $('text').value=''; syncCounts(); $('text').focus(); }
+document.querySelectorAll('.sampleBtn').forEach(b=>b.onclick=()=>{ const s=SAMPLES[b.dataset.sample]; $('text').value=s.t; $('instruct').value=s.i; syncCounts(); toast('Sample loaded ✍️'); });
+function applyStyle(s){ $('instruct').value=s||''; if(selModel==='custom-0.6B'&&s) toast('Style needs the 1.7B model — switched back to High Quality ⭐',false), setModel('custom-1.7B'); }
+document.querySelectorAll('#styleChips button').forEach(b=>{ b.onclick=()=>applyStyle(b.dataset.style); if(!b.title) b.title='Fill the Style box with this direction'+(b.dataset.style?': “'+b.dataset.style+'”':' (clear)'); });
+const EXTRA_STYLES=[
+ ["😏 Sarcastic","Speak with dry sarcasm and an eye-rolling tone, dripping with irony.","Fills the Style box with a sarcastic direction. Best on witty or deadpan lines."],
+ ["🏈 Sportscaster","Speak like an excited sports commentator in the final seconds, fast, loud and explosive.","High-energy play-by-play delivery for hype content."],
+ ["🌙 Bedtime","Speak slowly and softly like a bedtime story, warm, drowsy, with a gentle rocking rhythm.","Slow, soft narration for sleep stories and calm content."],
+ ["🦹 Villain","Speak like a sinister villain, low and menacing, savoring every single word.","Menacing character voice for stories and games."],
+ ["🦸 Heroic","Speak like a heroic leader rallying the troops, bold, loud and inspiring.","Bold trailer-style heroic delivery."],
+ ["🕵️ Noir","Speak like a weary noir detective, gravelly and slow, world-weary with dry wit.","Gravelly detective character for mysteries."],
+ ["🏴‍☠️ Pirate","Speak like a boisterous pirate captain, hearty and rough, with rolling Rs.","Fun character voice for kids content and games."],
+ ["📣 Coach","Speak like a motivational coach, high energy and punchy, with emphatic pauses.","Punchy motivational delivery for self-improvement content."],
+ ["💘 Romantic","Speak tenderly and romantically, soft and breathy, slow and intimate.","Intimate delivery for love stories and dedications."],
+ ["👻 Spooky","Speak in a creepy haunted whisper, slow and echoing, genuinely unsettling.","Horror narration and Halloween content."],
+ ["🤖 Robot","Speak like a friendly retro robot, flat and mechanical with precise clipped pacing.","Character effect for sci-fi and comedy."],
+ ["⏩ Auctioneer","Speak extremely fast like an auctioneer, breathless and rhythmic, barely pausing.","Maximum-pace novelty delivery."]
+];
+EXTRA_STYLES.forEach(s=>{ const b=document.createElement('button'); b.className='text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60'; b.dataset.style=s[1]; b.textContent=s[0]; b.title=s[2]; b.onclick=()=>applyStyle(s[1]); $('styleChips').appendChild(b); });
+document.querySelectorAll('.seg').forEach(b=>b.onclick=()=>setModel(b.dataset.model));
+function setModel(m){ selModel=m; document.querySelectorAll('.seg').forEach(x=>x.classList.toggle('active',x.dataset.model===m)); $('modelBadge').textContent=m==='custom-1.7B'?'1.7B high-quality':'0.6B fast'; const has=m==='custom-1.7B'; $('instruct').disabled=!has; $('instruct').style.opacity=has?1:.4; $('instructNote').textContent=has?'● active on 1.7B':'○ needs 1.7B — ignored on 0.6B'; $('instructNote').className='ml-auto text-[11px] '+(has?'text-emerald-300':'text-amber-300'); }
+function syncAdv(){ const t=$('temperature').value; $('tempVal').textContent=(t==='1'?'default':t); const p=$('top_p').value; $('toppVal').textContent=(p==='1'?'default':p); }
+function resetAdv(id){ $(id).value=1; syncAdv(); }
+function randomSeed(){ $('seed').value=Math.floor(Math.random()*999999); }
+
+/* ═════════ tabs ═════════ */
+document.querySelectorAll('.tab-btn').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  for(const t of ['studio','design','clone','script']) $('panel-'+t).classList.toggle('hidden',b.dataset.tab!==t);
+});
+document.querySelectorAll('.dpreset').forEach(b=>{ b.onclick=()=>{ $('d_instruct').value=b.dataset.p; }; if(!b.title) b.title='Use this voice recipe: “'+b.dataset.p+'”'; });
+const EXTRA_DESIGN=[
+ ["🕵️ Detective","Middle-aged male detective, gravelly low voice, slow deliberate pace, world-weary and dry."],
+ ["🧙 Witch","Ancient female voice, raspy and thin with a cackling undertone, slow with eerie pauses."],
+ ["🧘 Therapist","Calm middle-aged female voice, soft and even, slow reassuring cadence, warm and safe."],
+ ["👹 Overlord","Deep booming male voice, theatrical and menacing, dramatic pauses, powerful projection."],
+ ["🤖 Robot","Genderless synthetic voice, flat and mechanical, precise clipped syllables, faint electronic edge."]
+];
+EXTRA_DESIGN.forEach(s=>{ const b=document.createElement('button'); b.className='dpreset text-[11px] px-2 py-1 rounded-full bg-white/5 border border-white/10'; b.dataset.p=s[1]; b.textContent=s[0]; b.title='Use this voice recipe: “'+s[1]+'”'; b.onclick=()=>{ $('d_instruct').value=s[1]; }; const box=$('designPresets'); if(box) box.appendChild(b); });
+
+/* ═════════ health ═════════ */
+async function checkHealth(){
+  try{ const r=await fetch('/api/health'); const j=await r.json();
+    const b=j.backend||{};
+    $('backendBadge').textContent=`backend: ${b.torch&&String(b.torch).startsWith('missing')?'⏳ installing':'✓ torch '+String(b.torch||'').split('+')[0]} · ${b.cuda?'GPU':'CPU'} · qwen-tts ${String(b.qwen_tts||'').slice(0,18)}`+((j.boot&&j.boot.actual_sec!=null)?` · boot ${j.boot.actual_sec}s (avg ${j.boot.average_sec}s)`:'');
+    $('backendBadge').title=(j.boot&&j.boot.actual_sec!=null)?`This session booted in ${j.boot.actual_sec}s · ${j.boot.average_sec}s average over ${j.boot.samples} recorded boots · ~${j.boot.estimated_sec}s estimated next boot. Click ↻ Status to refresh.`:'Backend status. Click ↻ Status to refresh.';
+    $('footInfo').textContent=`device ${b.device} · loaded [${(j.loaded_models||[]).join(', ')||'none yet'}]`;
+    $('offlineBanner').classList.add('hidden');
+    return true;
+  }catch(e){ $('backendBadge').textContent='backend: unreachable — run ./start.sh'; $('offlineBanner').classList.remove('hidden'); return false; }
+}
+setInterval(checkHealth, 30000);
+async function restartServer(){
+  if(!confirm('Restart the server?\n\nActive generations will be cancelled, loaded models unloaded, and a fresh server will boot on the same port (:8000). The page reconnects automatically.')) return;
+  for(const k of Object.keys(activeJobs)) delete activeJobs[k];  // stop local poll loops silently
+  toast('Restarting server… reconnecting automatically ⏻');
+  try{ await fetch('/api/server/restart',{method:'POST'}); }catch(e){ /* response may die with the process — expected */ }
+  for(let i=0;i<30;i++){
+    await new Promise(res=>setTimeout(res,3000));
+    if(await checkHealth()){ toast('Server back online ✓'); loadHistory(); return; }
+  }
+  toast('Server is taking unusually long — check server.log or run ./start.sh',false);
+}
+async function exitServer(){
+  if(!confirm('Stop everything?\n\nActive generations are cancelled, TTS + writer models are unloaded (gigabytes of RAM freed), and the server process terminates.\n\nRelaunch anytime from the desktop icon.')) return;
+  for(const k of Object.keys(activeJobs)) delete activeJobs[k];  // stop local poll loops silently
+  let info='';
+  try{
+    const r=await fetch('/api/server/shutdown',{method:'POST'});
+    const j=await r.json().catch(()=>({}));
+    if(j.tts_unloaded&&j.tts_unloaded.length) info=`Freed ${(j.tts_freed_mb/1024).toFixed(1)} GB from ${j.tts_unloaded.join(', ')}.`;
+  }catch(e){ /* process may die before responding — still show the overlay */ }
+  const ov=$('stoppedOverlay');
+  if(info) $('stoppedDetail').textContent=info;
+  ov.classList.remove('hidden');
+  checkHealth();
+}
+
+/* ═════════ live job status bar (real backend phases) ═════════ */
+const JSTEPS=[['queued','Queued'],['loading_model','Loading'],['synthesizing','Synthesizing'],['saving','Saving']];
+const JWIDTH={queued:4,loading_model:14,synthesizing:45,saving:92,done:100,error:100};
+const activeJobs={};
+function fmtT(s){ s=Math.max(0,Math.floor(s||0)); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+function renderJBar(panel, job){
+  const el=$('jbar-'+panel); if(!el||!job) return;
+  const err=job.phase==='error', done=job.phase==='done', cx=job.phase==='cancelled', active=!done&&!err&&job.phase!=='cancelled';
+  const STEPS=(job.steps&&job.steps.length?job.steps:JSTEPS);
+  const cur=STEPS.findIndex(s=>s[0]===job.phase);
+  let steps=STEPS.map((s,i)=>{
+    const st=done?'done':(err?'todo':(i<cur?'done':(i===cur?'cur':'todo')));
+    const icon=st==='done'?'✓':(st==='cur'?'●':'○');
+    return `<div class="jstep ${st}"><span>${icon}</span>${s[1]}</div>${i<3?'<div class="jline"></div>':''}`;
+  }).join('');
+  if(done) steps+='<div class="jline"></div><div class="jstep done"><span>✓</span>Done</div>';
+  if(err) steps+='<div class="jline err"></div><div class="jstep err"><span>✕</span>Failed</div>';
+  if(cx) steps+='<div class="jline cx"></div><div class="jstep cx"><span>■</span>Cancelled</div>';
+  el.innerHTML=`<div class="jbar glass rounded-xl px-4 py-3 ${err?'is-err':''} ${done?'is-done':''} ${cx?'is-cancel':''}">
+    <div class="flex items-center gap-2"><span class="jdot"></span>
+      <b class="text-[12px]">${err?'Failed':(done?'Complete ✓':(cx?'Cancelled':(job.label||'Working…')))}</b>
+      ${active?`<button class="jcancel" onclick="cancelJob('${panel}',this)" title="Stop this generation at the next safe point, discard partial work, and unload the model from memory.">⏹ Cancel</button>`:''}
+      <span class="ml-auto font-mono text-[11px] text-slate-400">⏱ ${fmtT(job.elapsed_sec)}</span>
+      <span class="jpct">${done?100:Math.round(job.percent??JWIDTH[job.phase]??4)}%</span></div>
+    <div class="jsteps">${steps}</div>
+    <div class="pbar"><div class="pfill" style="width:${done?100:(job.percent??JWIDTH[job.phase]??4)}%"></div></div>
+    <div class="jdetail">${job.queue_position?`Queued #${job.queue_position+1} · `:''}${job.detail||''}${job.overtime?` <span class="text-amber-300">• past estimate — still working, normal on CPU.</span>`:''}</div>
+    ${(err||cx)?'':(done
+      ? `<div class="jcal">Finished in ${fmtT(job.elapsed_sec)} · predicted ~${job.predicted_sec??'?'}s · every run sharpens future estimates</div>`
+      : `<div class="jcal">~${job.predicted_sec??'?'}s predicted · live estimate, calibrated from ${job.calib_runs??0} run${(job.calib_runs??0)===1?'':'s'} on this machine <span class="hint sm" tabindex="0" data-tip="True per-token progress isn't exposed by the Qwen3-TTS engine (one monolithic generation call, no streaming hooks), so the % is a self-calibrating live estimate: wall-seconds per input character, learned from real completed jobs on this machine and saved to calib.json. It updates every poll, converges with use, and always lands on exactly 100 at completion. The phases above (queued → loading → synthesizing → saving) are 100% real backend state.">?</span></div>`)}
+  </div>`;
+}
+function clearJBar(panel){ const el=$('jbar-'+panel); if(el) el.innerHTML=''; }
+/* Submit a job, poll live status, drive the bar. Resolves with result, throws on error. */
+async function runJob(panel, url, body, btn, onPoll){
+  const isFD=(typeof FormData!=='undefined')&&body instanceof FormData;
+  let r;
+  try{ r=await fetch(url,{method:'POST',headers:isFD?{}:{'Content-Type':'application/json'},body:isFD?body:JSON.stringify(body)}); }
+  catch(e){ throw new Error(friendlyErr(e)); }
+  const q=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(q.detail||('HTTP '+r.status));
+  const id=q.job_id, myKey={}; activeJobs[panel]={key:myKey,id};
+  clearJBar(panel); setBusy(btn,true,'Working');
+  let fails=0;
+  try{
+    for(;;){
+      await new Promise(res=>setTimeout(res,1500));
+      if(activeJobs[panel]?.key!==myKey) throw new Error('superseded');
+      let jr=null;
+      try{ const pr=await fetch('/api/jobs/'+id); jr=await pr.json(); if(!pr.ok) throw new Error(jr.detail||'job lookup failed'); fails=0; }
+      catch(e){ if(++fails>=4){ renderJBar(panel,{phase:'error',detail:friendlyErr(e),elapsed_sec:0}); throw new Error(friendlyErr(e)); } continue; }
+      renderJBar(panel,jr);
+      if(onPoll) try{onPoll(jr)}catch(_){}
+      if(panel==='script'&&jr.partial&&document.activeElement!==$('scriptOut')){
+        $('scriptOut').value=jr.partial;
+        $('scriptWords').textContent='· '+jr.partial.split(/\s+/).filter(Boolean).length+' words (live…)';
+      }
+      if(jr.status==='done') return jr.result;
+      if(jr.status==='cancelled') throw new Error('__CANCELLED__');
+      if(jr.status==='error') throw new Error(jr.error||jr.detail||'job failed');
+    }
+  }finally{ if(activeJobs[panel]?.key===myKey) delete activeJobs[panel]; setBusy(btn,false); }
+}
+async function cancelJob(panel, btn){
+  const a=activeJobs[panel]; if(!a) return;
+  if(btn){ btn.disabled=true; btn.textContent='Cancelling…'; }
+  try{ await fetch('/api/jobs/'+a.id+'/cancel?unload=true',{method:'POST'}); }
+  catch(e){ toast('Cancel signal failed: '+friendlyErr(e),false); if(btn){ btn.disabled=false; btn.textContent='⏹ Cancel'; } }
+  /* the poll loop picks up the cancelled state (with freed-memory note) within ~2s */
+}
+
+/* ═════════ generation ═════════ */
+function advPayload(){
+  const p={ max_new_tokens:parseInt($('max_tokens').value)||2048 };
+  if($('temperature').value!=='1') p.temperature=parseFloat($('temperature').value);
+  if($('top_p').value!=='1') p.top_p=parseFloat($('top_p').value);
+  if($('top_k').value) p.top_k=parseInt($('top_k').value);
+  if($('seed').value!=='') p.seed=parseInt($('seed').value);
+  return p;
+}
+function setBusy(btn,on,label){ if(on){btn.dataset.orig=btn.innerHTML;btn.disabled=true;btn.classList.add('generating');btn.innerHTML='<span class="spinner"></span> '+label+'… (first run downloads model)';} else {btn.disabled=false;btn.classList.remove('generating');btn.innerHTML=btn.dataset.orig;} }
+
+let streamSession=0;
+async function generate(){
+  const text=$('text').value.trim(); if(!text) return toast('Type something first ✍️',false);
+  streamSession++; $('player').onended=null;
+  const btn=$('genBtn'); $('genStatus').textContent='';
+  const payload={text,language:$('language').value,speaker:selSpeaker,instruct:$('instruct').value,model:selModel,...advPayload()};
+  try{
+    if($('streamMode')&&$('streamMode').checked){ await generateStreamed(payload,btn); return; }
+    const j=await runJob('studio','/api/jobs/custom-voice',payload,btn);
+    playURL(j.file); $('outInfo').innerHTML=`<b class="text-slate-100">${selSpeaker} 🇺🇸</b> · ${j.duration_sec}s · ${j.sample_rate/1000}kHz · ${j.language} · ${j.model}${j.instruct_applied?' · <span class="text-violet-300">style applied</span>':''}`;
+    $('genStatus').textContent=`Done in studio ✓ ${j.duration_sec}s of audio.`; toast(`Done — ${j.duration_sec}s from ${selSpeaker} 🔊`); loadHistory(); checkHealth();
+  }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('studio',{phase:'error',detail:m,elapsed_sec:0}); $('genStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
+}
+async function generateStreamed(payload,btn){
+  const mySession=streamSession, p=$('player');
+  const st={urls:[],i:0,waiting:false,active:true};
+  p.onended=()=>{
+    if(!st.active||mySession!==streamSession) return;
+    if(st.i+1<st.urls.length){ st.i++; playURL(st.urls[st.i]); }
+    else st.waiting=true;
+  };
+  const onPoll=(jr)=>{
+    if(mySession!==streamSession) return;
+    const names=jr.parts_done||[];
+    if(names.length>st.urls.length){
+      st.urls=names.map(f=>'/outputs/'+f);
+      const n=jr.total_parts||st.urls.length;
+      $('genStatus').textContent=`Part ${st.urls.length}/${n} ready — playing through…`;
+      $('outInfo').innerHTML=`<b class="text-slate-100">${selSpeaker} 🇺🇸 stream</b> · part ${st.urls.length}/${n} playing, rest rendering…`;
+      if(st.urls.length===1){ playURL(st.urls[0]); toast('🔊 Part 1 playing — rest still rendering'); }
+      else if(st.waiting){ st.waiting=false; st.i++; playURL(st.urls[st.i]); }
+    }
+  };
+  try{
+    const j=await runJob('studio','/api/jobs/chunked',payload,btn,onPoll);
+    if(mySession!==streamSession) return;
+    st.active=false; p.onended=null;
+    if(!j.parts||!j.parts.length){ // single-sentence fallback: normal result
+      playURL(j.file); $('outInfo').innerHTML=`<b class="text-slate-100">${selSpeaker} 🇺🇸</b> · ${j.duration_sec}s · ${j.sample_rate/1000}kHz · ${j.language} · ${j.model}`;
+      $('genStatus').textContent=`Done in studio ✓ ${j.duration_sec}s of audio.`; toast(`Done — ${j.duration_sec}s 🔊`);
+    }else{
+      playURL(j.file);
+      $('outInfo').innerHTML=`<b class="text-slate-100">${selSpeaker} 🇺🇸 stream</b> · ${j.parts.length} parts · ${j.duration_sec}s total · stitched file ready`;
+      $('genStatus').textContent=`Done ✓ ${j.parts.length} parts streamed, ${j.duration_sec}s total.`;
+      toast(`Stream complete — ${j.parts.length} parts, ${j.duration_sec}s 🔊`);
+    }
+    loadHistory(); checkHealth();
+  }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('studio',{phase:'error',detail:m,elapsed_sec:0}); $('genStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
+}
+async function previewVoice(){ await generate(); }
+async function generateDesign(){
+  const btn=$('designBtn'); $('designStatus').textContent='';
+  try{
+    const j=await runJob('design','/api/jobs/voice-design',{text:$('d_text').value,language:$('d_language').value,instruct:$('d_instruct').value,...advPayload()},btn);
+    playURL(j.file); $('outInfo').innerHTML=`<b class="text-slate-100">Designed voice ✨</b> · ${j.duration_sec}s · ${j.sample_rate/1000}kHz`;
+    $('designStatus').textContent='Done ✓'; toast('Voice designed ✨'); loadHistory(); checkHealth();
+  }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('design',{phase:'error',detail:m,elapsed_sec:0}); $('designStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
+}
+let mediaRec=null, chunks=[];
+async function toggleRec(){
+  if(mediaRec&&mediaRec.state==='recording'){ mediaRec.stop(); $('recBtn').textContent='🎤 Record mic'; return; }
+  try{ const s=await navigator.mediaDevices.getUserMedia({audio:true}); mediaRec=new MediaRecorder(s); chunks=[];
+    mediaRec.ondataavailable=e=>chunks.push(e.data);
+    mediaRec.onstop=()=>{ const blob=new Blob(chunks,{type:'audio/webm'}); const url=URL.createObjectURL(blob); const rp=$('refPreview'); rp.src=url; rp.classList.remove('hidden'); webmToWavFile(blob); };
+    mediaRec.start(); $('recBtn').textContent='⏹ Stop recording';
+  }catch(e){ toast('Mic blocked — allow microphone or upload a file',false); }
+}
+let clonedFile=null;
+$('c_file').addEventListener('change',e=>{ clonedFile=e.target.files[0]||null; if(clonedFile){ const rp=$('refPreview'); rp.src=URL.createObjectURL(clonedFile); rp.classList.remove('hidden'); }});
+async function webmToWavFile(blob){ try{ const ab=await blob.arrayBuffer(); const ac=new (window.AudioContext||window.webkitAudioContext)(); const buf=await ac.decodeAudioData(ab); const wav=audioBufferToWav(buf); clonedFile=new File([wav],'mic-record.wav',{type:'audio/wav'}); toast('Mic take captured 🎤'); }catch(e){} }
+function audioBufferToWav(buf){ const n=buf.length, sr=buf.sampleRate, ch=buf.getChannelData(0); const b=new ArrayBuffer(44+n*2), v=new DataView(b); const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))}; ws(0,'RIFF');v.setUint32(4,36+n*2,true);ws(8,'WAVE');ws(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);ws(36,'data');v.setUint32(40,n*2,true); for(let i=0;i<n;i++){const s=Math.max(-1,Math.min(1,ch[i]));v.setInt16(44+i*2,s<0?s*0x8000:s*0x7FFF,true)} return new Blob([b],{type:'audio/wav'}); }
+async function generateClone(){
+  const f=clonedFile||$('c_file').files[0]; if(!f) return toast('Add reference audio first (upload or record) 🎤',false);
+  if(!$('c_text').value.trim()) return toast('Type what the clone should say',false);
+  const btn=$('cloneBtn'); $('cloneStatus').textContent='';
+  try{
+    const fd=new FormData(); fd.append('ref_audio',f); fd.append('target_text',$('c_text').value); fd.append('language',$('c_language').value); fd.append('ref_text',$('c_reftext').value); fd.append('model',$('c_model').value); fd.append('x_vector_only',$('c_xvec').checked); fd.append('max_new_tokens','2048');
+    const j=await runJob('clone','/api/jobs/voice-clone',fd,btn);
+    playURL(j.file); $('outInfo').innerHTML=`<b class="text-slate-100">Cloned voice 🧬</b> · ${j.duration_sec}s · ${j.sample_rate/1000}kHz`;
+    $('cloneStatus').textContent='Done ✓'; toast('Clone complete 🧬'); loadHistory(); checkHealth();
+  }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('clone',{phase:'error',detail:m,elapsed_sec:0}); $('cloneStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
+}
+
+/* ═════════ script writer (free local LLM) ═════════ */
+let SCRIPT_META=null, selScenario='story', selLength='standard', selWriter='darkidol', selProvider='local';
+const TONES=['Gritty','Playful','Dark','Sultry','Whimsical','Deadpan'];
+async function loadScriptMeta(){
+  TONES.forEach(t=>{ const b=document.createElement('button'); b.className='text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:border-violet-400/60'; b.textContent=t; b.title='Set tone to “'+t+'”'; b.onclick=()=>{ $('s_tone').value=t; }; $('toneChips').appendChild(b); });
+  document.querySelectorAll('#lenSeg .lseg').forEach(b=>b.onclick=()=>{ selLength=b.dataset.len; document.querySelectorAll('#lenSeg .lseg').forEach(x=>x.classList.toggle('active',x===b)); });
+  try{ const r=await fetch('/api/script/models'); SCRIPT_META=await r.json(); }
+  catch(e){ $('scriptGrid').innerHTML='<div class="col-span-full text-[12px] text-red-300 text-center py-4">Writer backend unreachable.</div>'; return; }
+  if(!SCRIPT_META.ollama_up) $('scriptGrid').innerHTML='<div class="col-span-full text-[12px] text-amber-300 text-center py-4">Ollama is not running — start it with <span class="font-mono">ollama serve</span> to enable the writer.</div>';
+  else { renderScriptGrid(); $('scriptStatus').textContent='Writer ready ✓ free, local, unfiltered.'; }
+  renderWriterSeg(); renderProviderSeg(); updateKeyBox();
+}
+function renderScriptGrid(){
+  const box=$('scriptGrid'); if(!box||!SCRIPT_META||!SCRIPT_META.scenarios) return; box.innerHTML='';
+  for(const sc of SCRIPT_META.scenarios){
+    const b=document.createElement('button');
+    b.className='card-hover text-left rounded-xl border px-3 py-2.5 '+(sc.id===selScenario?'border-violet-400 bg-violet-500/10':'border-white/10 bg-white/[.03]');
+    b.innerHTML=`<div class="font-bold text-[12.5px]">${sc.label}</div><div class="text-[11px] text-slate-400">${sc.desc}</div>`;
+    b.title=sc.label+': '+sc.desc;
+    b.onclick=()=>{ selScenario=sc.id; renderScriptGrid(); };
+    box.appendChild(b);
+  }
+}
+function writerModels(){
+  if(!SCRIPT_META) return [];
+  if(selProvider==='local') return (SCRIPT_META.llm_models||[]).map(m=>({id:m.id,label:m.label,
+    sub:`${m.size_gb} GB · ${m.note}`,
+    warn:m.fits_ram===false?'⚠ tight on RAM — may be slow or stall':null, avail:!!m.available,
+    why:m.available?((m.note||'')+' ('+m.tag+')'+(m.fits_ram===false?' WARNING: bigger than comfortably fits free RAM.':'')):'Not downloaded (`ollama pull '+m.tag+'`)'}));
+  const pv=(SCRIPT_META.providers||[]).find(p=>p.id===selProvider);
+  if(!pv) return [];
+  return pv.models.map(m=>({id:m.id,label:m.label,sub:'free tier · '+pv.label+(pv.configured?'':' · needs key'),
+    warn:null,avail:pv.configured,
+    why:pv.configured?('Free '+pv.label+' quota · '+m.id):('Save your free '+pv.label+' key above first — '+pv.key_url)}));
+}
+function renderProviderSeg(){
+  const box=$('providerSeg'); if(!box||!SCRIPT_META) return; box.innerHTML='';
+  const opts=[{id:'local',label:'🏠 Local Ollama',sub:'free forever · private'}].concat((SCRIPT_META.providers||[]).map(p=>({id:p.id,label:p.label,sub:p.configured?'key saved ✓':'free key needed'})));
+  for(const o of opts){
+    const b=document.createElement('button');
+    b.className='text-[12px] px-3 py-2 rounded-xl border '+(o.id===selProvider?'border-violet-400 bg-violet-500/15 font-bold':'border-white/10 bg-white/5');
+    b.innerHTML=`${o.label}<br><span class="opacity-70 text-[11px] font-normal">${o.sub}</span>`;
+    const pv=(SCRIPT_META.providers||[]).find(p=>p.id===o.id);
+    b.title=o.id==='local'?'100% free local models on this machine. No key, no cloud, private.':('Free-tier cloud backend. '+(pv?pv.note:''));
+    b.onclick=()=>{ selProvider=o.id;
+      if(o.id==='local'){ if(!['best','balanced','darkidol','fast'].includes(selWriter)) selWriter='darkidol'; }
+      else { const q=(SCRIPT_META.providers||[]).find(p=>p.id===o.id); selWriter=q?q.default:selWriter; }
+      renderProviderSeg(); renderWriterSeg(); updateKeyBox();
+    };
+    box.appendChild(b);
+  }
+}
+function renderWriterSeg(){
+  const box=$('writerSeg'); if(!box) return; box.innerHTML='';
+  const list=writerModels();
+  for(const m of list){
+    const b=document.createElement('button');
+    b.disabled=!m.avail;
+    b.className='wseg text-left text-[12px] px-3 py-2 rounded-xl border '+(m.id===selWriter?'border-violet-400 bg-violet-500/10':'border-white/10 bg-white/5')+(m.avail?'':' opacity-40 cursor-not-allowed');
+    b.innerHTML=`<b>${m.label}</b><br><span class="opacity-70 text-[11px]">${m.sub}</span>`+(m.warn?`<br><span class="text-amber-300 text-[11px]">${m.warn}</span>`:'');
+    b.title=m.why||m.label;
+    b.onclick=()=>{ selWriter=m.id; renderWriterSeg(); };
+    box.appendChild(b);
+  }
+  if(!list.some(m=>m.id===selWriter&&m.avail)){
+    const av=list.find(m=>m.avail); if(av){ selWriter=av.id; renderWriterSeg(); }
+  }
+}
+function updateKeyBox(){
+  const box=$('keyBox'); if(!box) return;
+  const pv=(SCRIPT_META&&SCRIPT_META.providers||[]).find(p=>p.id===selProvider);
+  if(!pv){ box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  $('keyLink').href=pv.key_url;
+  $('keyStatus').innerHTML=pv.configured?'<span class="text-emerald-300">✓ key saved — '+pv.label+' ready</span>':'<span class="text-amber-300">No key yet — grab a free one (60s), paste, save:</span>';
+  $('keyForget').style.display=pv.configured?'':'none';
+}
+async function saveKey(){
+  const k=$('keyInput').value.trim(); if(k.length<8) return toast('Paste the full key first',false);
+  $('keyStatus').textContent='Verifying with provider…';
+  try{
+    const r=await fetch('/api/script/keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:selProvider,key:k})});
+    const j=await r.json(); if(!r.ok) throw new Error(j.detail||'rejected');
+    $('keyInput').value=''; toast('Key verified & saved ✓'); await loadScriptMeta();
+  }catch(e){ $('keyStatus').innerHTML='<span class="text-red-300">Rejected: '+friendlyErr(e)+'</span>'; }
+}
+async function forgetKey(){
+  await fetch('/api/script/keys/'+selProvider,{method:'DELETE'}); toast('Key forgotten'); await loadScriptMeta();
+}
+async function generateScript(){
+  const topic=$('s_topic').value.trim(); if(!topic) return toast('Give me a topic first ✍️',false);
+  const btn=$('scriptBtn'); $('scriptStatus').textContent='';
+  try{
+    const j=await runJob('script','/api/jobs/script',{topic,scenario:selScenario,tone:$('s_tone').value,length:selLength,model:selWriter,provider:selProvider},btn);
+    $('scriptOut').value=j.script||'';
+    const n=j.words||(j.script||'').split(/\s+/).filter(Boolean).length;
+    $('scriptWords').textContent=`· ${n} words in ${j.took_sec}s`;
+    $('scriptStatus').textContent=`Done ✓ ${n} words · ${j.scenario}.`+(j.tts_parked?' '+j.tts_parked:'');
+    toast(`Script ready — ${n} words ✍️`); checkHealth();
+  }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('script',{phase:'error',detail:m,elapsed_sec:0}); $('scriptStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
+}
+function fillPipeVoices(){
+  const sel=$('pipeVoice'); if(!sel||!VOICES.length) return;
+  sel.innerHTML=VOICES.map(v=>`<option value="${v.id}" ${v.id===selSpeaker?'selected':''}>${v.flag||''} ${v.label}</option>`).join('');
+  sel.onchange=()=>{ if(sel.value) selectSpeaker(sel.value); };
+}
+function copyScript(){ const t=$('scriptOut').value; if(!t.trim()) return toast('Nothing to copy yet',false); navigator.clipboard.writeText(t).then(()=>toast('Copied 📋')).catch(()=>toast('Copy blocked by the browser',false)); }
+function sendToStudio(){
+  const t=$('scriptOut').value.trim(); if(!t) return toast('Write a script first ✍️',false);
+  $('text').value=t; syncCounts();
+  document.querySelector('.tab-btn[data-tab="studio"]').click();
+  toast('Script loaded into Studio 🎙️ — hit Generate');
+}
+async function writeAndSpeak(){
+  const topic=$('s_topic').value.trim(); if(!topic) return toast('Give me a topic first ✍️',false);
+  const btn=$('pipeBtn'); $('scriptStatus').textContent='';
+  try{
+    toast('Stage 1/2 — drafting script ✍️');
+    const s=await runJob('script','/api/jobs/script',{topic,scenario:selScenario,tone:$('s_tone').value,length:selLength,model:selWriter,provider:selProvider},btn);
+    $('scriptOut').value=s.script||'';
+    const n=s.words||(s.script||'').split(/\s+/).filter(Boolean).length;
+    $('scriptWords').textContent=`· ${n} words in ${s.took_sec}s`;
+    $('scriptStatus').textContent=`Script done ✓ ${n} words. Stage 2/2 — speaking…`;
+    const voice=($('pipeVoice')&&$('pipeVoice').value)||selSpeaker;
+    toast(`Stage 2/2 — ${voice} is speaking 🔊`);
+    const a=await runJob('script','/api/jobs/custom-voice',{text:s.script,language:$('language').value,speaker:voice,instruct:$('instruct').value,model:selModel},btn);
+    playURL(a.file);
+    $('outInfo').innerHTML=`<b class="text-slate-100">Pipeline 🎙️ ${voice}</b> · ${a.duration_sec}s · ${a.sample_rate/1000}kHz · ${a.language}${a.instruct_applied?' · <span class="text-violet-300">style applied</span>':''}`;
+    $('scriptStatus').textContent=`Done ✓ script + ${a.duration_sec}s of audio with ${voice}.`;
+    toast(`Pipeline complete — ${a.duration_sec}s of audio 🔊`); loadHistory(); checkHealth();
+  }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('script',{phase:'error',detail:m,elapsed_sec:0}); $('scriptStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
+}
+
+/* ═════════ player + waveform ═════════ */
+function playURL(url){
+  lastURL=url; const p=$('player'); p.src=url; p.play().catch(()=>{});
+  const a=$('dlBtn'); a.href=url; a.download=url.split('/').pop(); a.classList.remove('pointer-events-none','opacity-40');
+  startWave(p);
+}
+function replay(){ if(lastURL){ $('player').currentTime=0; $('player').play().catch(()=>{});} }
+function drawIdleWave(){
+  const c=$('wave'), ctx=c.getContext('2d'); const dpr=window.devicePixelRatio||1;
+  c.width=c.clientWidth*dpr; c.height=84*dpr; ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,c.clientWidth,84); ctx.fillStyle='rgba(139,92,246,.55)';
+  const mid=42; for(let x=0;x<c.clientWidth;x+=4){ const h=3+Math.abs(Math.sin(x*.08))*10+Math.random()*4; ctx.fillRect(x,mid-h/2,2,h); }
+}
+function startWave(media){
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    if(!analyser){ const src=audioCtx.createMediaElementSource(media); analyser=audioCtx.createAnalyser(); analyser.fftSize=256; src.connect(analyser); analyser.connect(audioCtx.destination); }
+    audioCtx.resume();
+    const c=$('wave'), ctx=c.getContext('2d');
+    cancelAnimationFrame(waveAnim);
+    const draw=()=>{ waveAnim=requestAnimationFrame(draw);
+      const dpr=window.devicePixelRatio||1; if(c.width!==c.clientWidth*dpr){c.width=c.clientWidth*dpr;c.height=84*dpr;}
+      ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,c.clientWidth,84);
+      const data=new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(data);
+      const n=64, bw=c.clientWidth/n;
+      for(let i=0;i<n;i++){ const v=data[Math.floor(i/data.length*n*1.4)]/255; const h=4+v*68;
+        const g=ctx.createLinearGradient(0,42-h/2,0,42+h/2); g.addColorStop(0,'#8b5cf6'); g.addColorStop(1,'#06b6d4');
+        ctx.fillStyle=g; const x=i*bw+2; ctx.beginPath(); ctx.roundRect(x,42-h/2,bw-4,h,4); ctx.fill(); }
+    }; draw();
+  }catch(e){ drawIdleWave(); }
+}
+
+/* ═════════ history ═════════ */
+async function loadHistory(){
+  try{ const r=await fetch('/api/history?limit=30'); const j=await r.json();
+    $('histCount').textContent='· '+j.items.length;
+    const box=$('history'); box.innerHTML=j.items.length?'':'<div class="text-[12px] text-slate-500 text-center py-4">No generations yet.<br>Your WAVs will live here.</div>';
+    for(const it of j.items){
+      const d=document.createElement('div'); d.className='rounded-xl border border-white/10 bg-white/[.03] px-3 py-2 flex items-center gap-2';
+      d.innerHTML=`<button class="w-8 h-8 rounded-full grid place-items-center bg-violet-600 shrink-0" title="Play">▶</button>
+        <div class="min-w-0 flex-1"><div class="truncate font-mono text-[11px]">${it.filename}</div><div class="text-[10px] text-slate-500 font-mono">${it.created} · ${it.size_kb} KB</div></div>
+        <a href="${it.url}" download class="text-[13px] opacity-70 hover:opacity-100" title="Download">⬇</a>
+        <button class="text-[13px] opacity-50 hover:opacity-100 hover:text-red-300" title="Delete">✕</button>`;
+      const [play,,del]=[d.children[0],d.children[2],d.children[3]];
+      play.onclick=()=>playURL(it.url);
+      del.onclick=async()=>{ await fetch('/api/history/'+it.filename,{method:'DELETE'}); loadHistory(); };
+      box.appendChild(d);
+    }
+  }catch(e){}
+}
+init();
+</script>
+</body>
+</html>

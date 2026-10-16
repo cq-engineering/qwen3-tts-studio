@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets — NEVER commit these (cloud TTS keys)
+keys.json
+.env
+
+# Runtime state (machine-specific, auto-created)
+outputs/*.wav
+uploads/*
+server.log
+errors.log*
+calib.json
+boot_times.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
