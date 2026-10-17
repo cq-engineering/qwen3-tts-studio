@@ -23,7 +23,7 @@ A beautiful dark-modern web studio built around the official **`qwen-tts`** pack
 
 Plus: live job status bar (real phases + self-calibrating %), ⏹ Cancel with memory unload, ⏻ Restart / ⏻ Exit server controls, hover-`?` explanations on all ~35 controls, persistent `errors.log` with viewer endpoint.
 
-Backend: `FastAPI` (`server.py`) — lazy model loading, single-worker job queue, REST API, static hosting. CPU `bfloat16` (auto) / GPU `bfloat16` + CUDA.
+Backend: `FastAPI` (`server.py` entrypoint + `app/` package) — lazy model loading, single-worker job queue, REST API, static hosting. CPU `bfloat16` (auto) / GPU `bfloat16` + CUDA.
 
 ## Requirements
 
@@ -83,14 +83,30 @@ python download_model.py --all      # + 0.6B, VoiceDesign, Base variants
 
 ## Project structure
 
+The backend is a thin entrypoint over a small package (`app/`); the frontend is
+markup (`static/index.html`) over ordered section scripts (`static/js/`).
+
 ```
 qwen3-tts_studio/
-├── server.py            # sole backend (~65KB): API, jobs, models, static hosting
-├── static/index.html    # entire frontend (~85KB single file, 4 tabs)
-├── assets/              # logo sources + Windows launcher/icon installer
+├── server.py                 # thin FastAPI entrypoint (~57 lines) — keeps `uvicorn server:app`
+├── app/
+│   ├── config.py             # paths + all static constants (voices, models, phases, script tables)
+│   ├── errlog.py             # rotating errors.log handler
+│   ├── errors.py             # shared exceptions (_Cancelled)
+│   ├── engine.py             # backend detect, model cache/loading, WAV save, synth cores
+│   ├── calibration.py        # self-tuning progress estimates (calib.json)
+│   ├── writers.py            # script writer: local Ollama + cloud (Groq/Gemini/Grok/Claude)
+│   ├── jobs.py               # job store, single worker, stitch, dialogue, cancel/unload
+│   ├── schemas.py            # Pydantic request models (range-validated params)
+│   ├── boot.py               # boot timing (boot_times.json)
+│   └── routers/              # health.py · synth.py · script.py · system.py (one APIRouter each)
+├── static/
+│   ├── index.html            # markup only (~375 lines)
+│   └── js/                   # core · jobs · script · duet · media · boot (classic scripts, ordered)
+├── assets/                   # logo sources + Windows launcher/icon installer
 ├── start.sh · smoke.sh · download_model.py · requirements.txt
-├── AGENTS.md            # operator-grade notes for future sessions
-└── outputs/ uploads/    # runtime: generated WAVs, temp uploads (gitignored)
+├── AGENTS.md                 # operator-grade notes for future sessions
+└── outputs/ uploads/         # runtime: generated WAVs, temp uploads (gitignored)
 ```
 
 ## Troubleshooting

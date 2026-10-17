@@ -1,6 +1,6 @@
 # AGENTS.md — qwen3-tts_studio
 
-**Path:** `/home/stigg/qwen3-tts_studio/` · **Port 8000 is permanent** (hardcoded in `start.sh`, `server.py` restart endpoint, Windows launcher URL, docs — change all or none). Not a git repo.
+**Path:** `/home/stigg/qwen3-tts_studio/` · **Port 8000 is permanent** (hardcoded in `start.sh`, `server.py` restart endpoint, Windows launcher URL, docs — change all or none). **Git repo** (branch `master`); tag **`pre-refactor`** = the last single-file version before the modular split — `git reset --hard pre-refactor` rolls the refactor back.
 
 ## Quickstart
 
@@ -20,8 +20,10 @@ pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu   
 
 | Path | Purpose |
 |---|---|
-| `server.py` | Sole backend (~54KB single file): FastAPI, lazy model loading, job queue, static hosting |
-| `static/index.html` | Entire frontend (~90KB single file, 5 tabs: Studio / Design / Clone / Script / Duet) |
+| `server.py` | Thin entrypoint (~57 lines): creates the `FastAPI` app, wires the routers + static mounts, keeps the `uvicorn server:app` contract |
+| `app/` | Backend package — `config` (constants) · `errlog` · `errors` · `engine` (models+synth) · `calibration` · `writers` (Ollama+cloud) · `jobs` (queue/worker) · `schemas` · `boot` · `routers/{health,synth,script,system}` |
+| `static/index.html` | Markup only (~375 lines, 5 tabs: Studio / Design / Clone / Script / Duet) |
+| `static/js/` | Frontend logic split into ordered classic scripts: `core · jobs · script · duet · media · boot` (shared global scope — inline `onclick` handlers still work; `boot.js` calls `init()` last) |
 | `assets/` | `make_logo.py` → `logo.png`/`icon.ico`; `assets/windows/` = Edge launcher `.bat` + shortcut `.ps1` (installed copies: `C:\Users\stigg\qwen3-tts_studio\`, `qwen3-tts Studio.lnk` on Desktop) |
 | Script writer backends | Local Ollama default (`SCRIPT_MODELS`, UI default `darkidol`) + optional cloud `SCRIPT_CLOUD` providers: **groq**, **gemini**, **grok** (xAI, OpenAI-compatible), **claude** (Anthropic Messages API, `x-api-key` + `anthropic-version` header). Cloud keys: `keys.json` (chmod 600, values never served) or `GROQ_API_KEY`/`GEMINI_API_KEY`/`XAI_API_KEY`/`ANTHROPIC_API_KEY` env. Cloud failures auto-fall-back to local Dark Idol. |
 | `outputs/` / `uploads/` | Served WAVs (`/outputs/*.wav`) / temp reference-audio uploads |
@@ -31,7 +33,7 @@ pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu   
 
 No tests, no lint, no CI in this project. Verify by hand: `curl /api/health`, submit a job, check `server.log`.
 
-## API (verified against `server.py` routes)
+## API (verified against `app/routers/*.py`)
 
 - `GET /api/health` · `GET /api/voices` · `GET /api/history` · `DELETE /api/history/{f}` (health includes `boot`: actual/average/estimated sec + sample count, persisted in `boot_times.json`)
 - Blocking (scripts): `POST /api/synthesize/custom-voice|voice-design|voice-clone`
@@ -54,8 +56,8 @@ No tests, no lint, no CI in this project. Verify by hand: `curl /api/health`, su
 - **SoX missing warning on import is benign.** Do not install it.
 - **qwen-tts has no streaming/token hooks** (`non_streaming_mode` is simulated) — the `%` is a calibrated estimate from `calib.json`, phases are the real state. Don't try to wire per-token progress.
 - Script jobs **park TTS weights first** (RAM fit), so `loaded_models` empties after drafting — expected, they reload on next Generate.
-- Cloud model IDs go stale (providers rename them; current IDs date to Oct 2026, flagged in `server.py`). A sudden cloud failure with model-not-found means check docs and edit `SCRIPT_CLOUD`.
-- Frontend JS can be syntax-checked: extract last `<script>` block, `node --check`. Balance check alone once missed a bad edit.
+- Cloud model IDs go stale (providers rename them; current IDs date to Oct 2026, flagged in `app/config.py`). A sudden cloud failure with model-not-found means check docs and edit `SCRIPT_CLOUD`.
+- Frontend JS is split across `static/js/*.js` (classic scripts, ordered, shared global scope) — syntax-check each with `node --check static/js/*.js`, or concatenate in DOM order and check. Balance check alone once missed a bad edit.
 - `.ps1`/`.bat` for Windows must be **ASCII + CRLF** — PowerShell 5.1 chokes on UTF-8 em-dashes.
 - `assets/windows/launcher.bat` rules (all learned from real failures): NO `goto` (jumping out of blocks corrupts the parser), NO `timeout`/`ping` waits (return instantly with no stdin — use PowerShell `Start-Sleep`), NO parens inside echo text in blocks, launch Edge by **full path** (`start msedge` → Access denied, bare `msedge` unresolvable in scripts). Services run FOREGROUND in persistent consoles — never daemonize through one-shot `wsl.exe` calls, and never pass quoted compound commands to `wsl.exe` (quotes get stripped); ship a script file (`run-server-fg.sh`) and invoke it bare.
 - Empty `text` → instant 422 (Pydantic `min_length`); missing clone `ref_text` without x-vector → 400. Both surface in the status bar, no toast-only paths.
