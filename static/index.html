@@ -113,6 +113,7 @@ tailwind.config = { theme: { extend: {
     <button data-tab="design" title="Voice Design: invent a brand-new timbre purely from a written description — no reference audio needed." class="tab-btn text-[13px] font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/5 transition">✨ Voice Design <span class="opacity-60 font-normal hidden sm:inline">· describe any voice</span></button>
     <button data-tab="clone" title="Voice Clone: copy any voice from a 3-second reference sample using the Base models." class="tab-btn text-[13px] font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/5 transition">🧬 Voice Clone <span class="opacity-60 font-normal hidden sm:inline">· 3-sec clone</span></button>
     <button data-tab="script" title="Script Writer: free local LLM drafts a speak-ready script from your topic — unfiltered, no cloud, no key — then sends it to the Studio." class="tab-btn text-[13px] font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/5 transition">✍️ Script <span class="opacity-60 font-normal hidden sm:inline">· free writer</span></button>
+    <button data-tab="duet" title="Duet: two-speaker dialogue — lines prefixed A: and B: performed by two voices and stitched into one file." class="tab-btn text-[13px] font-semibold px-4 py-2 rounded-xl border border-white/10 bg-white/5 transition">👥 Duet <span class="opacity-60 font-normal hidden sm:inline">· two voices</span></button>
     <span class="ml-auto hidden md:flex items-center gap-2 text-[11px] text-slate-500"><span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> to generate</span>
   </div>
 </header>
@@ -297,6 +298,8 @@ tailwind.config = { theme: { extend: {
       <div class="grid grid-cols-2 gap-2 mt-3">
         <button onclick="copyScript()" title="Copy the script to your clipboard." class="text-[13px] font-semibold px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10">📋 Copy script</button>
         <button onclick="sendToStudio()" title="Fill the Studio text box with this script and jump to the Studio tab, ready to generate audio." class="text-[13px] font-semibold px-3 py-2.5 rounded-xl bg-violet-600/30 border border-violet-400/40 hover:bg-violet-600/50">🎙️ Send to Studio →</button>
+        <button onclick="sendToDuet()" title="Fill the Duet tab's dialogue box with this script and jump there — lines starting A: / B: are performed by Voice A / Voice B." class="text-[13px] font-semibold px-3 py-2.5 rounded-xl bg-cyan-600/20 border border-cyan-400/40 hover:bg-cyan-600/40">🎭 Send to Duet →</button>
+        <button onclick="writeAndPerform()" title="One click, topic to duet: drafts the script, then immediately performs it with Duet Voices A + B. Lines starting A: / B: pick the voice — tip: use the Dialogue scenario." class="text-[13px] font-semibold px-3 py-2.5 rounded-xl text-white" style="background:linear-gradient(135deg,#8b5cf6,#06b6d4)">✍️ → 🎭 Write & Perform duet</button>
       </div>
       <div class="mt-4 pt-4 border-t border-white/10">
         <div class="flex items-center gap-2 flex-wrap">
@@ -306,6 +309,26 @@ tailwind.config = { theme: { extend: {
         </div>
         <button id="pipeBtn" onclick="writeAndSpeak()" title="Draft the script, then immediately synthesize it with the chosen voice and auto-play. One click, topic to audio." class="btn-primary w-full mt-3 rounded-2xl py-3.5 font-bold text-[15px]">✍️ → 🔊 Write &amp; Speak in one click</button>
       </div>
+    </div>
+
+    <!-- DUET PANEL -->
+    <div id="panel-duet" class="glass rounded-2xl p-5 hidden">
+      <h3 class="font-bold text-[16px]">👥 Duet <span class="text-[12px] font-medium text-slate-400">· two voices, one file</span><span class="hint" tabindex="0" data-tip="Two-speaker dialogue: pick a voice for A and B, write lines prefixed A: and B:, and get a performed conversation stitched into one WAV. Uses the Studio tab's language, model tier and style direction. Bare lines continue the current speaker.">?</span></h3>
+      <p class="text-[12px] text-slate-400 mt-1">Prefix each line with <span class="kbd">A:</span> or <span class="kbd">B:</span> — bare lines continue the current speaker. Max 24 lines.</p>
+      <div class="grid sm:grid-cols-2 gap-3 mt-3">
+        <div><label class="text-[12px] font-semibold text-slate-300">VOICE A<span class="hint" tabindex="0" data-tip="The timbre that speaks every A: line. Aiden + Ryan is the classic contrast, but any two premade voices work.">?</span></label><select id="duetA" class="field w-full mt-1.5 text-[13px] px-3 py-2.5"></select></div>
+        <div><label class="text-[12px] font-semibold text-slate-300">VOICE B<span class="hint" tabindex="0" data-tip="The timbre that speaks every B: line. Pick something contrasting with Voice A so the conversation is easy to follow.">?</span></label><select id="duetB" class="field w-full mt-1.5 text-[13px] px-3 py-2.5"></select></div>
+      </div>
+      <label class="text-[12px] font-semibold text-slate-300 block mt-3">DIALOGUE<span class="hint" tabindex="0" data-tip="One speaker turn per line works best. Long speeches synthesize slower; the status bar tracks real line-by-line progress and each finished line is playable from the list below as soon as it exists. Uses Studio language, model and style.">?</span></label>
+      <textarea id="duetText" rows="6" class="field w-full mt-1.5 text-[14px] leading-relaxed px-4 py-3" placeholder="A: ...&#10;B: ..."></textarea>
+      <div class="flex gap-2 mt-2 items-center">
+        <button onclick="$('duetText').value=DUET_SAMPLE" class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10">🎭 Load sample</button>
+        <span class="text-[11px] text-slate-500">uses Studio language · model · style</span>
+      </div>
+      <div id="jbar-duet"></div>
+      <button id="duetBtn" onclick="generateDuet()" title="Performs the dialogue line by line with the two voices and stitches it into one file. Shortcut: Ctrl+Enter." class="btn-primary w-full mt-4 rounded-2xl py-3.5 font-bold text-[15px]">🎭 Perform duet <span class="font-normal opacity-70">· Ctrl+Enter</span></button>
+      <div id="duetStatus" class="text-[12px] text-slate-400 mt-2 text-center"></div>
+      <div id="duetLines" class="flex flex-col gap-1.5 mt-3"></div>
     </div>
 
     <!-- HOW IT WORKS -->
@@ -334,6 +357,7 @@ tailwind.config = { theme: { extend: {
         <h2 class="font-bold text-[14px]">LIBRARY <span id="histCount" class="text-slate-500 font-medium"></span><span class="hint" tabindex="0" data-tip="Every finished generation auto-saves here as a 24 kHz WAV with timestamp and file size. ▶ previews it in the player above, ⬇ downloads it, ✕ deletes it from disk. The list refreshes after each completed job.">?</span></h2>
         <button onclick="loadHistory()" class="text-[12px] px-2.5 py-1 rounded-full bg-white/5 border border-white/10">↻</button>
       </div>
+      <div id="stitchBar" style="display:none" class="items-center gap-2 mb-2 rounded-xl border border-violet-400/30 bg-violet-500/10 px-3 py-2"></div>
       <div id="history" class="flex flex-col gap-2 max-h-[46vh] overflow-y-auto scroll-slim pr-1 text-[13px]"></div>
     </div>
   </aside>
@@ -408,8 +432,8 @@ async function init(){
     LANGS=['Auto','English','Chinese','Japanese','Korean','French','German','Spanish','Portuguese','Russian','Italian'];
   }
   for(const id of ['language','d_language','c_language']){ $(id).innerHTML=LANGS.map(l=>`<option ${l==='English'?'selected':''}>${l}</option>`).join(''); }
-  renderVoices(); selectSpeaker('Aiden'); fillPipeVoices(); checkHealth(); loadHistory(); syncCounts(); drawIdleWave(); loadScriptMeta();
-  document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){ e.preventDefault(); const tab=document.querySelector('.tab-btn.active').dataset.tab; if(tab==='studio')generate(); else if(tab==='design')generateDesign(); else if(tab==='script')generateScript(); else generateClone(); }});
+  renderVoices(); selectSpeaker('Aiden'); fillPipeVoices(); fillDuetVoices(); checkHealth(); loadHistory(); syncCounts(); drawIdleWave(); loadScriptMeta();
+  document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){ e.preventDefault(); const tab=document.querySelector('.tab-btn.active').dataset.tab; if(tab==='studio')generate(); else if(tab==='design')generateDesign(); else if(tab==='script')generateScript(); else if(tab==='duet')generateDuet(); else generateClone(); }});
 }
 function syncCounts(){ $('charCount').textContent=$('text').value.length; }
 document.addEventListener('input',e=>{ if(e.target.id==='text')syncCounts(); });
@@ -461,7 +485,7 @@ function randomSeed(){ $('seed').value=Math.floor(Math.random()*999999); }
 /* ═════════ tabs ═════════ */
 document.querySelectorAll('.tab-btn').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active');
-  for(const t of ['studio','design','clone','script']) $('panel-'+t).classList.toggle('hidden',b.dataset.tab!==t);
+  for(const t of ['studio','design','clone','script','duet']) $('panel-'+t).classList.toggle('hidden',b.dataset.tab!==t);
 });
 document.querySelectorAll('.dpreset').forEach(b=>{ b.onclick=()=>{ $('d_instruct').value=b.dataset.p; }; if(!b.title) b.title='Use this voice recipe: “'+b.dataset.p+'”'; });
 const EXTRA_DESIGN=[
@@ -684,8 +708,9 @@ async function loadScriptMeta(){
   document.querySelectorAll('#lenSeg .lseg').forEach(b=>b.onclick=()=>{ selLength=b.dataset.len; document.querySelectorAll('#lenSeg .lseg').forEach(x=>x.classList.toggle('active',x===b)); });
   try{ const r=await fetch('/api/script/models'); SCRIPT_META=await r.json(); }
   catch(e){ $('scriptGrid').innerHTML='<div class="col-span-full text-[12px] text-red-300 text-center py-4">Writer backend unreachable.</div>'; return; }
-  if(!SCRIPT_META.ollama_up) $('scriptGrid').innerHTML='<div class="col-span-full text-[12px] text-amber-300 text-center py-4">Ollama is not running — start it with <span class="font-mono">ollama serve</span> to enable the writer.</div>';
-  else { renderScriptGrid(); $('scriptStatus').textContent='Writer ready ✓ free, local, unfiltered.'; }
+  renderScriptGrid();
+  if(!SCRIPT_META.ollama_up) $('scriptStatus').innerHTML='Ollama is down — local drafting unavailable, but <b>Groq</b>/<b>Gemini</b> above work without it (free key). Or start Ollama with <span class="font-mono">ollama serve</span>.';
+  else $('scriptStatus').textContent='Writer ready ✓ free, local, unfiltered.';
   renderWriterSeg(); renderProviderSeg(); updateKeyBox();
 }
 function renderScriptGrid(){
@@ -789,6 +814,30 @@ function sendToStudio(){
   document.querySelector('.tab-btn[data-tab="studio"]').click();
   toast('Script loaded into Studio 🎙️ — hit Generate');
 }
+function sendToDuet(){
+  const t=$('scriptOut').value.trim(); if(!t) return toast('Write a script first ✍️',false);
+  $('duetText').value=t;
+  document.querySelector('.tab-btn[data-tab="duet"]').click();
+  toast('Script loaded into Duet 🎭 — A: / B: lines pick the voice');
+}
+function fillScriptResult(j){
+  $('scriptOut').value=j.script||'';
+  const n=j.words||(j.script||'').split(/\s+/).filter(Boolean).length;
+  $('scriptWords').textContent=`· ${n} words in ${j.took_sec}s`;
+  return n;
+}
+async function writeAndPerform(){
+  const topic=$('s_topic').value.trim(); if(!topic) return toast('Give me a topic first ✍️',false);
+  const btn=$('pipeBtn'); $('scriptStatus').textContent='';
+  try{
+    toast('Stage 1/2 — drafting the duet script ✍️');
+    const s=await runJob('script','/api/jobs/script',{topic,scenario:selScenario,tone:$('s_tone').value,length:selLength,model:selWriter,provider:selProvider},btn);
+    fillScriptResult(s);
+    $('scriptStatus').textContent=`Script done ✓ ${(s.words||'')} words. Stage 2/2 — performing duet…`;
+    document.querySelector('.tab-btn[data-tab="duet"]').click();
+    await generateDuet();
+  }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('script',{phase:'error',detail:m,elapsed_sec:0}); $('scriptStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
+}
 async function writeAndSpeak(){
   const topic=$('s_topic').value.trim(); if(!topic) return toast('Give me a topic first ✍️',false);
   const btn=$('pipeBtn'); $('scriptStatus').textContent='';
@@ -807,6 +856,29 @@ async function writeAndSpeak(){
     $('scriptStatus').textContent=`Done ✓ script + ${a.duration_sec}s of audio with ${voice}.`;
     toast(`Pipeline complete — ${a.duration_sec}s of audio 🔊`); loadHistory(); checkHealth();
   }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('script',{phase:'error',detail:m,elapsed_sec:0}); $('scriptStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
+}
+
+/* ═════════ duet (two-speaker dialogue) ═════════ */
+const DUET_SAMPLE=`A: Did you hear that? The lighthouse just turned itself on.\nB: Impossible. No keeper has climbed those stairs in forty years.\nA: Then explain the light moving across the water right now.\nB: ...Get in the boat. We are going out there.`;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fillDuetVoices(){
+  for(const [id,def] of [['duetA','Aiden'],['duetB','Ryan']]){
+    const sel=$(id); if(!sel||!VOICES.length) continue;
+    sel.innerHTML=VOICES.map(v=>`<option value="${v.id}"${v.id===def?' selected':''}>${v.flag||''} ${v.label}</option>`).join('');
+  }
+}
+async function generateDuet(){
+  const text=$('duetText').value.trim(); if(!text) return toast('Write some dialogue first 🎭',false);
+  const btn=$('duetBtn'); $('duetStatus').textContent=''; $('duetLines').innerHTML='';
+  try{
+    const j=await runJob('duet','/api/jobs/dialogue',{text,speaker_a:$('duetA').value,speaker_b:$('duetB').value,language:$('language').value,model:selModel,instruct:$('instruct').value},btn);
+    playURL(j.file);
+    const an=esc($('duetA').selectedOptions[0].text), bn=esc($('duetB').selectedOptions[0].text);
+    $('outInfo').innerHTML=`<b class="text-slate-100">Duet 🎭 ${an} + ${bn}</b> · ${j.segments.length} lines · ${j.duration_sec}s`;
+    $('duetStatus').textContent=`Done ✓ ${j.segments.length} lines, ${j.duration_sec}s.`;
+    $('duetLines').innerHTML=j.segments.map(s=>`<button onclick="playURL('${s.url}')" title="Play this line" class="w-full text-left rounded-xl border border-white/10 bg-white/[.03] hover:bg-white/[.07] px-3 py-2 flex items-center gap-2 transition"><span class="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${s.who==='A'?'bg-violet-500/25 text-violet-200':'bg-cyan-500/25 text-cyan-200'}">${s.who}</span><span class="min-w-0 flex-1 truncate text-[12px] text-slate-300">${esc(s.speaker)}: ${esc(s.text)}</span><span class="font-mono text-[10px] text-slate-500 shrink-0">${s.duration_sec}s</span><span class="text-[12px] shrink-0">▶</span></button>`).join('');
+    toast(`Duet complete — ${j.segments.length} lines 🔊`); loadHistory(); checkHealth();
+  }catch(e){ if(String(e.message)==='superseded'||String(e.message)==='__CANCELLED__') return; const m=friendlyErr(e); renderJBar('duet',{phase:'error',detail:m,elapsed_sec:0}); $('duetStatus').textContent='Error: '+m; toast('Error: '+m,false); checkHealth(); }
 }
 
 /* ═════════ player + waveform ═════════ */
@@ -848,16 +920,39 @@ async function loadHistory(){
     const box=$('history'); box.innerHTML=j.items.length?'':'<div class="text-[12px] text-slate-500 text-center py-4">No generations yet.<br>Your WAVs will live here.</div>';
     for(const it of j.items){
       const d=document.createElement('div'); d.className='rounded-xl border border-white/10 bg-white/[.03] px-3 py-2 flex items-center gap-2';
-      d.innerHTML=`<button class="w-8 h-8 rounded-full grid place-items-center bg-violet-600 shrink-0" title="Play">▶</button>
+      d.innerHTML=`<input type="checkbox" class="w-4 h-4 shrink-0 accent-violet-500" title="Select for stitching"${stitchSel.includes(it.filename)?' checked':''}>
+        <button class="w-8 h-8 rounded-full grid place-items-center bg-violet-600 shrink-0" title="Play">▶</button>
         <div class="min-w-0 flex-1"><div class="truncate font-mono text-[11px]">${it.filename}</div><div class="text-[10px] text-slate-500 font-mono">${it.created} · ${it.size_kb} KB</div></div>
         <a href="${it.url}" download class="text-[13px] opacity-70 hover:opacity-100" title="Download">⬇</a>
         <button class="text-[13px] opacity-50 hover:opacity-100 hover:text-red-300" title="Delete">✕</button>`;
-      const [play,,del]=[d.children[0],d.children[2],d.children[3]];
+      const cb=d.children[0], play=d.children[1], del=d.children[4];
+      cb.onchange=()=>toggleStitch(it.filename,cb.checked);
       play.onclick=()=>playURL(it.url);
-      del.onclick=async()=>{ await fetch('/api/history/'+it.filename,{method:'DELETE'}); loadHistory(); };
+      del.onclick=async()=>{ stitchSel=stitchSel.filter(f=>f!==it.filename); renderStitchBar(); await fetch('/api/history/'+it.filename,{method:'DELETE'}); loadHistory(); };
       box.appendChild(d);
     }
+    renderStitchBar();
   }catch(e){}
+}
+let stitchSel=[];
+function toggleStitch(fn,on){ if(on){ if(!stitchSel.includes(fn)) stitchSel.push(fn); } else stitchSel=stitchSel.filter(f=>f!==fn); renderStitchBar(); }
+function renderStitchBar(){
+  const bar=$('stitchBar'); if(!bar) return;
+  if(stitchSel.length<2){ bar.style.display='none'; return; }
+  bar.style.display='flex';
+  bar.innerHTML=`<span class="text-[12px] text-slate-300"><b>${stitchSel.length}</b> selected, in order</span><button onclick="stitchSelected()" title="Stitch the ticked files top-to-bottom into one WAV (same sample rate required)." class="text-[12px] font-bold px-3 py-1.5 rounded-full text-white" style="background:linear-gradient(135deg,#8b5cf6,#06b6d4)">⛓ Stitch into one file</button><button onclick="stitchSel=[];renderStitchBar();loadHistory()" class="text-[11px] text-slate-500 underline">clear</button>`;
+}
+async function stitchSelected(){
+  if(stitchSel.length<2) return toast('Tick at least 2 files to stitch',false);
+  const names=[...stitchSel];
+  toast('Stitching '+names.length+' files… ⛓');
+  try{
+    const r=await fetch('/api/stitch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filenames:names})});
+    const j=await r.json(); if(!r.ok) throw new Error(j.detail||'stitch failed');
+    stitchSel=[]; renderStitchBar(); loadHistory(); playURL(j.file);
+    $('outInfo').innerHTML=`<b class="text-slate-100">Stitched ⛓</b> · ${names.length} parts · ${j.duration_sec}s`;
+    toast(`Stitched — ${j.duration_sec}s combined 🔊`);
+  }catch(e){ toast('Stitch failed: '+friendlyErr(e),false); }
 }
 init();
 </script>

@@ -216,7 +216,7 @@ def _canon_speaker(name: str) -> str:
     return canon[key]
 
 def _gen_kwargs(p: dict) -> Dict[str, Any]:
-    kw: Dict[str, Any] = {"max_new_tokens": int(p.get("max_new_tokens") or 2048)}
+    kw: Dict[str, Any] = {"max_new_tokens": min(4096, max(128, int(p.get("max_new_tokens") or 2048)))}
     if p.get("temperature") is not None:
         kw["temperature"] = float(p["temperature"])
     if p.get("top_p") is not None:
@@ -286,21 +286,27 @@ def _synth_voice_clone(p: dict) -> Tuple[Any, int, dict]:
     if not ref_path:
         raise HTTPException(400, "Reference audio is missing")
     try:
-        import soundfile as sf
-        data, sr_in = sf.read(str(ref_path), dtype="float32", always_2d=False)
-        if getattr(data, "ndim", 1) > 1:
-            data = data.mean(axis=-1)
-        ref_arg = (data, int(sr_in))
-    except Exception:
-        ref_arg = str(ref_path)
-    tts = _load_model(model_key)
-    wavs, sr = tts.generate_voice_clone(
-        text=target_text, language=(p.get("language") or "").strip() or "Auto",
-        ref_audio=ref_arg, ref_text=(ref_text or None),
-        x_vector_only_mode=xvec,
-        max_new_tokens=int(p.get("max_new_tokens") or 2048),
-    )
-    return wavs, int(sr), {"model": model_key}
+        try:
+            import soundfile as sf
+            data, sr_in = sf.read(str(ref_path), dtype="float32", always_2d=False)
+            if getattr(data, "ndim", 1) > 1:
+                data = data.mean(axis=-1)
+            ref_arg = (data, int(sr_in))
+        except Exception:
+            ref_arg = str(ref_path)
+        tts = _load_model(model_key)
+        wavs, sr = tts.generate_voice_clone(
+            text=target_text, language=(p.get("language") or "").strip() or "Auto",
+            ref_audio=ref_arg, ref_text=(ref_text or None),
+            x_vector_only_mode=xvec,
+            max_new_tokens=min(4096, max(128, int(p.get("max_new_tokens") or 2048))),
+        )
+        return wavs, int(sr), {"model": model_key}
+    finally:
+        try:
+            Path(ref_path).unlink(missing_ok=True)  # never hoard uploads
+        except Exception:
+            pass
 
 # ------------------------------------------------- live % calibration ---
 # True per-token progress isn't exposed by qwen-tts (one monolithic generate
@@ -333,6 +339,7 @@ _calib_load()
 def _job_model_key(kind: str, p: dict) -> str:
     return {"custom-voice": p.get("model") or "custom-1.7B",
             "chunked": p.get("model") or "custom-1.7B",
+            "dialogue": p.get("model") or "custom-1.7B",
             "voice-design": "design-1.7B",
             "voice-clone": p.get("model") or "base-1.7B"}[kind]
 
@@ -401,6 +408,8 @@ def _job_label(kind: str, p: dict) -> str:
         return "VoiceDesign 1.7B"
     if kind == "script":
         return f"Script · {(SCENARIOS.get(p.get('scenario') or '', {}) or {}).get('label', '?')}"
+    if kind == "dialogue":
+        return f"Duet {p.get('speaker_a', '?')} + {p.get('speaker_b', '?')}"
     return f"Clone · {p.get('model', '')}"
 
 def _job_enqueue(kind: str, p: dict, steps=None) -> str:
@@ -422,6 +431,51 @@ def _job_enqueue(kind: str, p: dict, steps=None) -> str:
             _jobs.pop(k, None)
     _executor.submit(_run_job, jid)
     return jid
+
+def _stitch_parts(names: list, prefix: str):
+    """Stitch saved WAVs (by filename) into one file. Validates containment
+    + suffix + uniform sample rate. Returns (filename, duration, sr)."""
+    import soundfile as sf
+    import numpy as np
+    if not names or len(names) > 20:
+        raise HTTPException(400, "Pick 1–20 files to stitch.")
+    arrays, sr = [], None
+    for nm in names:
+        base = Path(nm).name
+        if not base.endswith(".wav"):
+            raise HTTPException(400, f"Not a WAV: {base}")
+        f = (OUTPUTS_DIR / base).resolve()
+        if f.parent != OUTPUTS_DIR.resolve() or not f.exists():
+            raise HTTPException(404, f"Not found: {base}")
+        data, sri = sf.read(str(f), dtype="float32", always_2d=False)
+        if sr is None:
+            sr = int(sri)
+        elif int(sri) != sr:
+            raise HTTPException(400, "All parts need the same sample rate.")
+        arrays.append(np.asarray(data, dtype=np.float32).reshape(-1))
+    combo = np.concatenate(arrays)
+    cfname = f"{prefix}_{int(time.time())}_{uuid.uuid4().hex[:6]}.wav"
+    sf.write(str(OUTPUTS_DIR / cfname), combo, sr)
+    return cfname, round(len(combo) / float(sr), 2), sr
+
+def _parse_dialogue(text: str, speaker_a: str, speaker_b: str):
+    """[(who, line, speaker_id)] — 'A:'/'B:' prefixed lines; bare lines
+    continue the current speaker (default A)."""
+    import re
+    out, cur = [], "A"
+    for raw in (text or "").splitlines():
+        s = raw.strip()
+        if not s:
+            continue
+        m = re.match(r"^([ABab])\s*[:\-–)]\s*(.+)$", s)
+        if m:
+            cur = m.group(1).upper()
+            line = m.group(2).strip()
+        else:
+            line = s
+        if line:
+            out.append((cur, line, speaker_a if cur == "A" else speaker_b))
+    return out
 
 def _run_job(jid: str) -> None:
     with _jobs_lock:
@@ -540,21 +594,71 @@ def _run_job(jid: str) -> None:
                 _finalize_cancel(jid)
                 return
             _job_set(jid, phase="saving", detail="Stitching parts into one file…", progress=96)
-            import soundfile as sf
-            import numpy as np
-            arrays = [np.asarray(sf.read(str(OUTPUTS_DIR / f["filename"]),
-                                         dtype="float32", always_2d=False)[0],
-                                 dtype=np.float32).reshape(-1) for f in parts]
-            combo = np.concatenate(arrays)
-            cfname = f"{info['speaker'].lower()}_full_{int(time.time())}_{uuid.uuid4().hex[:6]}.wav"
-            sf.write(str(OUTPUTS_DIR / cfname), combo, sr)
-            dur = round(len(combo) / float(sr), 2)
+            cfname, dur, sr = _stitch_parts([f["filename"] for f in parts],
+                                            info['speaker'].lower() + "_full")
             result = {"ok": True, "file": f"/outputs/{cfname}", "filename": cfname,
                       "sample_rate": int(sr), "duration_sec": dur,
                       "parts": [dict(f, url=f"/outputs/{f['filename']}") for f in parts],
                       **info}
             _job_set(jid, status="done", phase="done",
                      detail=f"Done — {n} parts, {dur}s total ✓",
+                     result=result, finished_at=time.time(), progress=1.0)
+            return
+        if kind == "dialogue":
+            segs = _parse_dialogue(p.get("text") or "", p.get("speaker_a") or "?",
+                                   p.get("speaker_b") or "?")
+            if not segs:
+                _job_set(jid, status="error", phase="error",
+                         detail="No speakable lines — prefix lines with A: or B:",
+                         error="No speakable lines — prefix lines with A: or B:",
+                         finished_at=time.time())
+                return
+            key = p.get("model") or "custom-1.7B"
+            if key not in ("custom-0.6B", "custom-1.7B"):
+                _job_set(jid, status="error", phase="error",
+                         detail="model must be custom-0.6B or custom-1.7B",
+                         error="model must be custom-0.6B or custom-1.7B",
+                         finished_at=time.time())
+                return
+            m = len(segs)
+            _job_set(jid, phase="loading_model",
+                     detail=f"Warming voices for a {m}-line duet…" if key in _model_cache
+                     else f"Loading {MODELS[key]['size']} weights…",
+                     total_parts=m, parts_done=[])
+            _load_model(key)
+            if _check_cancel(jid):
+                _finalize_cancel(jid)
+                return
+            lang = (p.get("language") or "").strip() or "Auto"
+            parts, sr = [], 24000
+            for i, (who, line, spk) in enumerate(segs, 1):
+                if _check_cancel(jid):
+                    _finalize_cancel(jid)
+                    return
+                _job_set(jid, phase="synthesizing",
+                         detail=f"Line {i}/{m} ({spk})…" + (" — earlier lines playable in Library" if parts else ""),
+                         progress=round(12 + 78 * (i - 1) / m, 1),
+                         parts_done=[f["filename"] for f in parts], total_parts=m)
+                lining = {"text": line, "language": lang, "speaker": spk,
+                          "instruct": (p.get("instruct") or "").strip() or None,
+                          "model": key, "max_new_tokens": p.get("max_new_tokens") or 2048}
+                wavs, sr, info = _synth_custom_voice(lining)
+                fname = _save_wav(wavs[0], int(sr), f"duet_{who.lower()}{i}")
+                parts.append({"filename": fname, "speaker": spk, "who": who, "text": line,
+                              "duration_sec": round(len(wavs[0]) / float(sr), 2)})
+                _job_set(jid, parts_done=[f["filename"] for f in parts],
+                         progress=round(12 + 78 * i / m, 1))
+            if _check_cancel(jid):
+                _finalize_cancel(jid)
+                return
+            _job_set(jid, phase="saving", detail="Stitching the duet…", progress=96)
+            cfname, dur, sr = _stitch_parts([f["filename"] for f in parts], "duet_full")
+            result = {"ok": True, "file": f"/outputs/{cfname}", "filename": cfname,
+                      "sample_rate": int(sr), "duration_sec": dur,
+                      "segments": [dict(s, url=f"/outputs/{s['filename']}") for s in parts],
+                      "model": key, "language": lang}
+            _job_set(jid, status="done", phase="done",
+                     detail=f"Done — duet of {m} lines, {dur}s ✓",
                      result=result, finished_at=time.time(), progress=1.0)
             return
         model_key = _job_model_key(kind, p)
@@ -738,12 +842,23 @@ SCRIPT_CLOUD = {
                "note": "Free tier, generous quotas, fast.",
                "default": "gemini-2.0-flash",
                "models": [{"id": "gemini-2.0-flash", "label": "2.0 Flash — fast + sharp"}]},
+    "grok": {"label": "Grok 🤖", "key_url": "https://console.x.ai/",
+             "note": "xAI models via free credits. Bold, witty voice.",
+             "default": "grok-4",
+             "models": [{"id": "grok-4", "label": "Grok 4 — flagship"},
+                        {"id": "grok-3-mini", "label": "Grok 3 Mini — fast + cheap"}]},
+    "claude": {"label": "Claude 🧠", "key_url": "https://console.anthropic.com/",
+               "note": "Anthropic models. Best-in-class dialogue and nuance.",
+               "default": "claude-sonnet-4-5",
+               "models": [{"id": "claude-sonnet-4-5", "label": "Sonnet — best all-rounder"},
+                        {"id": "claude-haiku-4-5", "label": "Haiku — fastest"}]},
 }
 # NOTE (Oct 2026): providers rename models occasionally — if a cloud draft
 # starts failing with model-not-found, check their docs and edit the IDs here.
 
 def _cloud_key(provider: str) -> str:
-    env = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY"}.get(provider, "")
+    env = {"groq": "GROQ_API_KEY", "gemini": "GEMINI_API_KEY",
+           "grok": "XAI_API_KEY", "claude": "ANTHROPIC_API_KEY"}.get(provider, "")
     k = (_os.environ.get(env, "") or "").strip() if env else ""
     if not k:
         with _calib_lock:
@@ -760,6 +875,17 @@ def _cloud_verify(provider: str, key: str):
         if provider == "gemini":
             req = _urlreq.Request(
                 f"https://generativelanguage.googleapis.com/v1beta/models?key={key}")
+            with _urlreq.urlopen(req, timeout=20) as r:
+                return (r.status == 200), ("ok" if r.status == 200 else f"HTTP {r.status}")
+        if provider == "grok":
+            req = _urlreq.Request("https://api.x.ai/v1/models",
+                                  headers={"Authorization": f"Bearer {key}"})
+            with _urlreq.urlopen(req, timeout=20) as r:
+                return (r.status == 200), ("ok" if r.status == 200 else f"HTTP {r.status}")
+        if provider == "claude":
+            req = _urlreq.Request("https://api.anthropic.com/v1/models",
+                                  headers={"x-api-key": key,
+                                           "anthropic-version": "2023-06-01"})
             with _urlreq.urlopen(req, timeout=20) as r:
                 return (r.status == 200), ("ok" if r.status == 200 else f"HTTP {r.status}")
     except Exception as e:
@@ -785,18 +911,33 @@ def _draft_cloud(provider: str, p: dict) -> dict:
     system, prompt = _script_prompt(topic, sc, (p.get("tone") or "").strip(), words)
     t0 = time.time()
     try:
-        if provider == "groq":
+        if provider in ("groq", "grok"):
+            base = {"groq": "https://api.groq.com/openai/v1/chat/completions",
+                    "grok": "https://api.x.ai/v1/chat/completions"}[provider]
             body = _json.dumps({"model": mid,
                                 "messages": [{"role": "system", "content": system},
                                              {"role": "user", "content": prompt}],
                                 "temperature": 0.95, "top_p": 0.9,
                                 "max_tokens": toks}).encode()
-            req = _urlreq.Request("https://api.groq.com/openai/v1/chat/completions",
+            req = _urlreq.Request(base,
                                   data=body, headers={"Content-Type": "application/json",
                                                       "Authorization": f"Bearer {key}"})
             with _urlreq.urlopen(req, timeout=120) as r:
                 d = _json.loads(r.read().decode())
             text = d["choices"][0]["message"]["content"]
+        elif provider == "claude":
+            body = _json.dumps({"model": mid,
+                                "max_tokens": toks,
+                                "system": system,
+                                "messages": [{"role": "user", "content": prompt}],
+                                "temperature": 0.95, "top_p": 0.9}).encode()
+            req = _urlreq.Request("https://api.anthropic.com/v1/messages",
+                                  data=body, headers={"Content-Type": "application/json",
+                                                      "x-api-key": key,
+                                                      "anthropic-version": "2023-06-01"})
+            with _urlreq.urlopen(req, timeout=120) as r:
+                d = _json.loads(r.read().decode())
+            text = "".join(b.get("text", "") for b in d["content"] if b.get("type") == "text")
         else:
             body = _json.dumps({"system_instruction": {"parts": [{"text": system}]},
                                 "contents": [{"parts": [{"text": prompt}]}],
@@ -929,7 +1070,7 @@ _log.info("server boot (backend=%s)", _backend_info)
 
 class KeyRequest(BaseModel):
     provider: str
-    key: str
+    key: str = Field(max_length=500)
 
 @app.post("/api/script/keys")
 def script_keys(req: KeyRequest):
@@ -959,20 +1100,20 @@ class CustomVoiceRequest(BaseModel):
     speaker: str = "Aiden"
     instruct: Optional[str] = ""
     model: str = "custom-1.7B"
-    max_new_tokens: int = 2048
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    top_k: Optional[int] = None
+    max_new_tokens: int = Field(2048, ge=128, le=4096)
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
+    top_k: Optional[int] = Field(None, ge=1, le=500)
     seed: Optional[int] = None
 
 class VoiceDesignRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     language: str = "English"
     instruct: str = Field(min_length=3, max_length=2000)
-    max_new_tokens: int = 2048
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    top_k: Optional[int] = None
+    max_new_tokens: int = Field(2048, ge=128, le=4096)
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
+    top_k: Optional[int] = Field(None, ge=1, le=500)
     seed: Optional[int] = None
 
 @app.get("/api/health")
@@ -1026,13 +1167,13 @@ async def synth_clone(
     ref_text: str = Form(""),
     model: str = Form("base-1.7B"),
     x_vector_only: bool = Form(False),
-    max_new_tokens: int = Form(2048),
+    max_new_tokens: int = Form(2048, ge=128, le=4096),
     ref_audio: UploadFile = File(...),
 ):
     raw = await ref_audio.read()
     if len(raw) > 25 * 1024 * 1024:
         raise HTTPException(400, "Reference audio must be under 25 MB")
-    upath = UPLOADS_DIR / f"ref_{uuid.uuid4().hex[:8]}_{ref_audio.filename or 'clip.wav'}"
+    upath = UPLOADS_DIR / f"ref_{uuid.uuid4().hex[:8]}_{Path(ref_audio.filename or 'clip.wav').name}"
     upath.write_bytes(raw)
     try:
         wavs, sr, info = _synth_voice_clone({
@@ -1072,7 +1213,7 @@ async def job_clone(
     ref_text: str = Form(""),
     model: str = Form("base-1.7B"),
     x_vector_only: bool = Form(False),
-    max_new_tokens: int = Form(2048),
+    max_new_tokens: int = Form(2048, ge=128, le=4096),
     ref_audio: UploadFile = File(...),
 ):
     if not (target_text or "").strip():
@@ -1080,7 +1221,7 @@ async def job_clone(
     raw = await ref_audio.read()
     if len(raw) > 25 * 1024 * 1024:
         raise HTTPException(400, "Reference audio must be under 25 MB")
-    upath = UPLOADS_DIR / f"ref_{uuid.uuid4().hex[:8]}_{ref_audio.filename or 'clip.wav'}"
+    upath = UPLOADS_DIR / f"ref_{uuid.uuid4().hex[:8]}_{Path(ref_audio.filename or 'clip.wav').name}"
     upath.write_bytes(raw)
     return {"job_id": _job_enqueue("voice-clone", {
         "target_text": target_text, "language": language, "ref_text": ref_text,
@@ -1143,6 +1284,12 @@ def _finalize_cancel(jid: str) -> str:
         job = _jobs.get(jid)
         unload = bool(job and job.get("cancel_unload", True))
         kind, p = (job["kind"], job["params"]) if job else (None, {})
+    for stale in [p.get("ref_audio_path")] if isinstance(p, dict) else []:
+        try:
+            if stale:
+                Path(stale).unlink(missing_ok=True)  # cancelled clones leave no orphans
+        except Exception:
+            pass
     info = ""
     if unload and kind:
         try:
@@ -1215,6 +1362,44 @@ def job_script(payload: dict):
          "length": payload.get("length", "standard"),
          "model": model, "provider": provider}
     return {"job_id": _job_enqueue("script", p, steps=SCRIPT_STEPS), "status": "queued"}
+
+class DialogueRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+    speaker_a: str = "Aiden"
+    speaker_b: str = "Ryan"
+    language: str = "English"
+    model: str = "custom-1.7B"
+    instruct: Optional[str] = ""
+    max_new_tokens: int = Field(2048, ge=128, le=4096)
+
+@app.post("/api/jobs/dialogue", status_code=202)
+def job_dialogue(req: DialogueRequest):
+    a = _canon_speaker(req.speaker_a)
+    b = _canon_speaker(req.speaker_b)
+    segs = _parse_dialogue(req.text, a, b)
+    if not segs:
+        raise HTTPException(400, "No speakable lines — prefix lines with A: or B:")
+    if len(segs) > 24:
+        raise HTTPException(400, f"Too many lines ({len(segs)}). Max 24 per duet.")
+    if req.model not in ("custom-0.6B", "custom-1.7B"):
+        raise HTTPException(400, "model must be custom-0.6B or custom-1.7B")
+    p = req.model_dump()
+    p["speaker_a"] = a
+    p["speaker_b"] = b
+    return {"job_id": _job_enqueue("dialogue", p), "status": "queued", "lines": len(segs)}
+
+class StitchRequest(BaseModel):
+    filenames: List[str]
+    prefix: str = Field("stitch", max_length=20)
+
+@app.post("/api/stitch")
+def stitch(req: StitchRequest):
+    if not req.filenames or len(req.filenames) > 20:
+        raise HTTPException(400, "Pick 1–20 files.")
+    safe_prefix = "".join(c for c in (req.prefix or "stitch") if c.isalnum() or c in "-_") or "stitch"
+    cfname, dur, sr = _stitch_parts(req.filenames, safe_prefix)
+    return {"ok": True, "file": f"/outputs/{cfname}", "filename": cfname,
+            "sample_rate": int(sr), "duration_sec": dur, "parts": len(req.filenames)}
 
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str):
@@ -1327,9 +1512,11 @@ def server_restart():
         try:
             import os as _os
             import sys as _sys
+            host = _os.environ.get("BIND_HOST", "0.0.0.0")
+            port = str(_os.environ.get("PORT", "8000"))
             _os.execv(_sys.executable, [_sys.executable, "-m", "uvicorn",
                                         "server:app", "--app-dir", str(BASE_DIR),
-                                        "--host", "0.0.0.0", "--port", "8000"])
+                                        "--host", host, "--port", port])
         except Exception:
             _log.exception("server restart exec failed")
             import os as _os2

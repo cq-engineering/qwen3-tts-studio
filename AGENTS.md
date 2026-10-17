@@ -21,9 +21,9 @@ pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu   
 | Path | Purpose |
 |---|---|
 | `server.py` | Sole backend (~54KB single file): FastAPI, lazy model loading, job queue, static hosting |
-| `static/index.html` | Entire frontend (~85KB single file, 4 tabs: Studio / Design / Clone / Script) |
+| `static/index.html` | Entire frontend (~90KB single file, 5 tabs: Studio / Design / Clone / Script / Duet) |
 | `assets/` | `make_logo.py` → `logo.png`/`icon.ico`; `assets/windows/` = Edge launcher `.bat` + shortcut `.ps1` (installed copies: `C:\Users\stigg\qwen3-tts_studio\`, `qwen3-tts Studio.lnk` on Desktop) |
-| Script writer backends | Local Ollama default (`SCRIPT_MODELS`, UI default `darkidol`) + optional free-tier Groq/Gemini (`SCRIPT_CLOUD`). Cloud keys: `keys.json` (chmod 600, values never served) or `GROQ_API_KEY`/`GEMINI_API_KEY` env. Cloud failures auto-fall-back to local Dark Idol. |
+| Script writer backends | Local Ollama default (`SCRIPT_MODELS`, UI default `darkidol`) + optional cloud `SCRIPT_CLOUD` providers: **groq**, **gemini**, **grok** (xAI, OpenAI-compatible), **claude** (Anthropic Messages API, `x-api-key` + `anthropic-version` header). Cloud keys: `keys.json` (chmod 600, values never served) or `GROQ_API_KEY`/`GEMINI_API_KEY`/`XAI_API_KEY`/`ANTHROPIC_API_KEY` env. Cloud failures auto-fall-back to local Dark Idol. |
 | `outputs/` / `uploads/` | Served WAVs (`/outputs/*.wav`) / temp reference-audio uploads |
 | Repo hygiene | `LICENSE` (Apache-2.0), `.gitignore` (excludes `keys.json`, WAVs, logs, runtime JSON), `smoke.sh` (endpoint smoke test — run with server up) |
 | `calib.json` | Self-tuning synth-time estimates (auto-written, learn from real jobs) |
@@ -40,6 +40,7 @@ No tests, no lint, no CI in this project. Verify by hand: `curl /api/health`, su
 - `POST /api/models/unload[?model=]` — purges weights, reports real `freed_mb` from RSS. Safe mid-synthesis (in-flight calls hold their own ref).
 - `POST /api/server/restart` — 200s first, then `execv`s a fresh process rebinding `:8000`. Old jobs vanish; UI auto-reconnects.
 - `GET /api/script/models` (Ollama models + `fits_ram` + `ollama_up`, scenarios, cloud `providers` with key URLs) · `POST /api/jobs/script`
+- `POST /api/jobs/dialogue` (two-speaker duet: `A:`/`B:` lines → per-line synth + stitched file + playable segments, max 24 lines) · `POST /api/stitch` (combine up to 20 library WAVs, same-rate only)
 - `POST /api/script/keys` + `DELETE /api/script/keys/{provider}` — cloud key save/forget (values never returned).
 
 ## Gotchas earned the hard way
@@ -58,4 +59,7 @@ No tests, no lint, no CI in this project. Verify by hand: `curl /api/health`, su
 - `.ps1`/`.bat` for Windows must be **ASCII + CRLF** — PowerShell 5.1 chokes on UTF-8 em-dashes.
 - `assets/windows/launcher.bat` rules (all learned from real failures): NO `goto` (jumping out of blocks corrupts the parser), NO `timeout`/`ping` waits (return instantly with no stdin — use PowerShell `Start-Sleep`), NO parens inside echo text in blocks, launch Edge by **full path** (`start msedge` → Access denied, bare `msedge` unresolvable in scripts). Services run FOREGROUND in persistent consoles — never daemonize through one-shot `wsl.exe` calls, and never pass quoted compound commands to `wsl.exe` (quotes get stripped); ship a script file (`run-server-fg.sh`) and invoke it bare.
 - Empty `text` → instant 422 (Pydantic `min_length`); missing clone `ref_text` without x-vector → 400. Both surface in the status bar, no toast-only paths.
+- Uploads: 25 MB cap, client filenames reduced to a safe basename (`Path(name).name`), reference clips deleted in a `finally` after synthesis — `uploads/` can't fill or escape.
+- Sampling params are range-validated (`max_new_tokens` 128–4096, temperature 0–2, top-p 0–1, top-k 1–500) — the UI can't push the worker into hour-long runs.
+- No auth by design (single-user local app): restart/shutdown/unload are open endpoints. Never expose to the internet; lock down with `BIND_HOST=127.0.0.1` (`start.sh` + restart endpoint honor `BIND_HOST`/`PORT` env).
 - `edit` tool fails on curly-quote/Unicode mismatches — fall back to python `re.sub` for those lines.

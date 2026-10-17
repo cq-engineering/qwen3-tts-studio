@@ -16,9 +16,10 @@ A beautiful dark-modern web studio built around the official **`qwen-tts`** pack
 | 🎙️ **Studio** | Voice dropdown (American group first), 11 languages (Auto + 10), model switch **1.7B High-Quality ⭐ / 0.6B Fast**, style/emotion **instruct** + 20 preset chips (1.7B-only), advanced sampling (temperature, top-p/k, max tokens, seed), ⚡ **Stream mode** (sentence parts, first audio fast, real progress, stitched WAV), sample texts, `Ctrl+Enter` |
 | ✨ **Voice Design** | 1.7B-VoiceDesign: free-form voice description → brand-new timbre, 8 inspiration presets |
 | 🧬 **Voice Clone** | Base 0.6B/1.7B: reference upload **or mic recording**, transcript + `x_vector_only_mode` toggle |
-| ✍️ **Script** | Free local-LLM script writer (Ollama, unfiltered) + optional free-tier Groq/Gemini cloud backends, 12 scenario types, one-click **Write & Speak** pipeline |
+| ✍️ **Script** | Free local-LLM script writer (Ollama, unfiltered; default writer **Dark Idol**) + optional cloud backends (**Groq**, **Gemini**, **Grok/xAI**, **Claude/Anthropic**), 12 scenario types incl. **Dialogue**, one-click **Write & Speak** pipeline, **Send to Studio / Send to Duet / Write & Perform duet** |
+| 👥 **Duet** | Two-speaker dialogue: `A:`/`B:` lines performed by two voices, per-line playback, stitched file |
 | 🔊 **Now Playing** | Live FFT waveform visualizer, download WAV (24 kHz), replay |
-| 📚 **Library** | Auto-saved history with play / download / delete |
+| 📚 **Library** | Auto-saved history with play / download / delete + tick-to-**stitch** selected files |
 
 Plus: live job status bar (real phases + self-calibrating %), ⏹ Cancel with memory unload, ⏻ Restart / ⏻ Exit server controls, hover-`?` explanations on all ~35 controls, persistent `errors.log` with viewer endpoint.
 
@@ -31,7 +32,7 @@ Backend: `FastAPI` (`server.py`) — lazy model loading, single-worker job queue
 | OS / Python | Linux/WSL + Python 3.12 (`python3 -m venv .venv`) |
 | RAM | 8 GB for 1.7B (weights ~3.5 GB resident); script writer parks TTS to fit |
 | GPU | Optional — auto-detected, strongly recommended for interactive speed |
-| Optional | [Ollama](https://ollama.ai) for the free local Script writer; free Groq/Gemini keys for cloud writers |
+| Optional | [Ollama](https://ollama.ai) for the free local Script writer; free-tier cloud keys for the cloud writers (**Groq**, **Gemini**, **Grok/xAI**, **Claude**). **Ollama is optional, not required** — TTS, cloning, design, and cloud writers all work without it; the Script tab says so inline when it's down |
 
 ## Quick start
 
@@ -76,6 +77,9 @@ python download_model.py --all      # + 0.6B, VoiceDesign, Base variants
 
 - Cloud TTS keys live in `keys.json` (`chmod 600`, values never served) or `GROQ_API_KEY`/`GEMINI_API_KEY` env vars. **Never commit `keys.json`** (already in `.gitignore`).
 - The server binds `0.0.0.0:8000` — on a LAN that means LAN-reachable. Bind `127.0.0.1` instead if you only use it locally (edit `start.sh`).
+- Uploads are capped at 25 MB, filenames sanitized, reference clips deleted after synthesis, and sampling params are range-validated server-side — even the UI can't send out-of-range values.
+- No auth on the API (restart/shutdown/unload included) — fine for a single-user local app, do not expose it to the internet as-is. Override bind/port with `BIND_HOST` / `PORT` env vars (defaults `0.0.0.0:8000`).
+- `errors.log` may contain local paths in tracebacks — single-user local only.
 
 ## Project structure
 
