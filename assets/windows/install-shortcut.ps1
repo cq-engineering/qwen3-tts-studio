@@ -3,6 +3,7 @@ $appDir  = "$env:USERPROFILE\qwen3-tts_studio"
 $desktop = [Environment]::GetFolderPath('Desktop')
 New-Item -ItemType Directory -Force -Path $appDir | Out-Null
 Copy-Item -Force "$PSScriptRoot\launcher.bat" "$appDir\launcher.bat"
+Copy-Item -Force "$PSScriptRoot\wait-health.ps1" "$appDir\wait-health.ps1"
 Copy-Item -Force "$PSScriptRoot\..\icon.ico"  "$appDir\icon.ico"
 Remove-Item -Force "$desktop\Qwen3 TTSI.lnk" -ErrorAction SilentlyContinue
 $W = New-Object -ComObject WScript.Shell
